@@ -21,7 +21,7 @@ set -euo pipefail
 # ===========================================================================
 
 SCRIPT_NAME="$(basename "$0")"
-SCRIPT_VERSION="4.0.0"
+SCRIPT_VERSION="4.1.0"
 VCF_VERSION="9.1.0.0"
 DEPOT_ROOT="/opt/vcf-depot"
 DEPOT_NAME="vcf9"
@@ -61,6 +61,11 @@ DOWNLOAD_BINARIES="false"
 OPEN_FIREWALL="true"
 IMPORT_CA="false"
 CA_URL=""
+
+# Data disk (optional — formats and mounts a block device as the web root)
+# Article recommends a separate 500 GB+ data disk mounted at /var/www/html.
+DATA_DISK=""
+SKIP_DISK_SETUP="false"
 
 WEB_USER="www-data"
 
@@ -111,8 +116,13 @@ Download tool options:
 
 CA / certificate options:
   --import-ca                  Import depot cert into system + Java truststores
-                               (calls import_vcf9depot_ca.sh alongside this script)
+                               (calls import_vcf9depot_ca.sh; also installs JRE on Ubuntu)
   --ca-url URL                 Fetch CA from URL instead of using generated cert
+
+Data disk options (Ubuntu fresh install with a separate data disk):
+  --data-disk DEVICE           Block device to format (ext4) and mount as web root
+                               e.g. --data-disk /dev/sdb  (article uses 500 GB+)
+  --skip-disk-setup            Skip format/mount (disk already prepared)
 
 Misc:
   --skip-firewall              Do not open the firewall port
@@ -162,6 +172,8 @@ parse_args() {
       --skip-tool-extract)  AUTO_EXTRACT_TOOL="false";     shift 1 ;;
       --import-ca)          IMPORT_CA="true";              shift 1 ;;
       --ca-url)             CA_URL="${2:-}";               shift 2 ;;
+      --data-disk)          DATA_DISK="${2:-}";            shift 2 ;;
+      --skip-disk-setup)    SKIP_DISK_SETUP="true";        shift 1 ;;
       --skip-firewall)      OPEN_FIREWALL="false";         shift 1 ;;
       --help|-h)            usage; exit 0 ;;
       *) die "Unknown argument: $1  (run with --help)" ;;
@@ -218,20 +230,61 @@ install_packages() {
     dnf|yum)
       local pkgs="httpd mod_ssl openssl httpd-tools jq tar curl unzip"
       [[ -f /etc/redhat-release ]] && pkgs+=" policycoreutils-python-utils"
+      # keytool for Java truststore import (only when --import-ca is set)
+      [[ "${IMPORT_CA}" == "true" ]] && pkgs+=" java-11-openjdk-headless"
       "${pkg_mgr}" install -y ${pkgs}
       ;;
     apt)
       apt-get update -y
-      DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        apache2 openssl apache2-utils jq tar curl unzip
+      # ca-certificates: provides update-ca-certificates (usually pre-installed)
+      # default-jre-headless: provides keytool, needed for Java truststore import
+      local pkgs="apache2 openssl apache2-utils jq tar curl unzip ca-certificates"
+      [[ "${IMPORT_CA}" == "true" ]] && pkgs+=" default-jre-headless"
+      DEBIAN_FRONTEND=noninteractive apt-get install -y ${pkgs}
       ;;
   esac
+}
+
+# ---------------------------------------------------------------------------
+# Data disk setup (optional — formats a block device and mounts as web root)
+# Article recommends a 500 GB+ data disk for the depot binaries.
+# Pass --data-disk /dev/sdb to enable; skip if disk is already mounted.
+setup_data_disk() {
+  if [[ "${SKIP_DISK_SETUP}" == "true" ]]; then
+    info "Skipping data disk setup (--skip-disk-setup)"
+    return 0
+  fi
+  [[ -n "${DATA_DISK}" ]] || return 0   # no disk configured — skip silently
+
+  [[ -b "${DATA_DISK}" ]] \
+    || die "Block device not found: ${DATA_DISK}  (use --skip-disk-setup if already mounted)"
+
+  if mount | grep -q " on ${WEB_ROOT} "; then
+    warn "${WEB_ROOT} is already mounted — skipping format/mount."
+    return 0
+  fi
+
+  info "Formatting ${DATA_DISK} as ext4 and mounting to ${WEB_ROOT}"
+  mkfs.ext4 -F "${DATA_DISK}"
+  mkdir -p "${WEB_ROOT}"
+
+  if ! grep -q "^${DATA_DISK}[[:space:]]" /etc/fstab; then
+    info "Adding ${DATA_DISK} to /etc/fstab"
+    echo "${DATA_DISK} ${WEB_ROOT} ext4 defaults 1 1" >> /etc/fstab
+  fi
+
+  mount -a
+  systemctl daemon-reload
+  info "Data disk ready: $(df -h "${WEB_ROOT}" | tail -1)"
 }
 
 # ---------------------------------------------------------------------------
 create_depot_tree() {
   local depot_data_root="${DEPOT_ROOT}/${DEPOT_NAME}"
   info "Creating depot directory tree at ${depot_data_root}"
+
+  # Ensure web root exists (apache2 package creates it, but be defensive)
+  mkdir -p "${WEB_ROOT}"
 
   mkdir -p "${depot_data_root}/PROD/COMP/ESX_HOST"
   mkdir -p "${depot_data_root}/PROD/COMP/NSX_T_MANAGER"
@@ -340,14 +393,23 @@ create_auth() {
 
 # ---------------------------------------------------------------------------
 configure_apache() {
-  info "Configuring Apache2 SSL virtual host"
+  local pkg_mgr
+  pkg_mgr="$(detect_pkg_mgr)"
 
-  # Enable ssl and headers modules, default-ssl site
-  a2enmod ssl headers
-  a2ensite default-ssl
+  info "Configuring Apache2/httpd SSL virtual host"
 
-  cat > "${APACHE_SSL_CONF}" <<EOF
+  if [[ "${pkg_mgr}" == "apt" ]]; then
+    # Ubuntu / Debian — use a2enmod / a2ensite helpers
+    a2enmod ssl headers
+    a2ensite default-ssl
+
+    # Disable the plain-HTTP default site so port 80 doesn't return the
+    # Ubuntu "It works!" page instead of an HTTPS redirect.
+    a2dissite 000-default 2>/dev/null || true
+
+    cat > "${APACHE_SSL_CONF}" <<EOF
 # VCF 9.1 Offline Depot — Apache2 (HTTPS + basic auth)
+# Generated by ${SCRIPT_NAME} v${SCRIPT_VERSION}
 <IfModule mod_ssl.c>
   <VirtualHost _default_:${DEPOT_PORT}>
     ServerName ${DEPOT_FQDN}
@@ -361,6 +423,20 @@ configure_apache() {
     SSLHonorCipherOrder   off
     Header always set Strict-Transport-Security "max-age=63072000"
 
+    # Depot data lives at ${DEPOT_ROOT}/${DEPOT_NAME}/PROD which is OUTSIDE
+    # DocumentRoot. Use Alias so Apache serves it without relying on symlink
+    # follow across directory boundaries (avoids 403 Forbidden).
+    Alias /PROD/ ${DEPOT_ROOT}/${DEPOT_NAME}/PROD/
+    <Directory ${DEPOT_ROOT}/${DEPOT_NAME}/PROD/>
+      Options Indexes FollowSymLinks
+      AllowOverride None
+      AuthType Basic
+      AuthName "VCF Depot"
+      AuthUserFile ${HTPASSWD_FILE}
+      Require valid-user
+    </Directory>
+
+    # Also protect the DocumentRoot itself
     <Directory ${WEB_ROOT}>
       Options Indexes FollowSymLinks
       AllowOverride None
@@ -376,9 +452,46 @@ configure_apache() {
 </IfModule>
 EOF
 
-  apache2ctl configtest
-  systemctl enable apache2
-  systemctl restart apache2
+    apache2ctl configtest
+    systemctl enable apache2
+    systemctl restart apache2
+
+  else
+    # RHEL / CentOS / Rocky — httpd
+    local httpd_ssl_conf="/etc/httpd/conf.d/vcf9-depot-ssl.conf"
+    cat > "${httpd_ssl_conf}" <<EOF
+# VCF 9.1 Offline Depot — httpd (HTTPS + basic auth)
+# Generated by ${SCRIPT_NAME} v${SCRIPT_VERSION}
+Listen ${DEPOT_PORT} https
+
+<VirtualHost _default_:${DEPOT_PORT}>
+  ServerName ${DEPOT_FQDN}
+  DocumentRoot ${WEB_ROOT}
+
+  SSLEngine on
+  SSLCertificateFile    ${CERT_FILE}
+  SSLCertificateKeyFile ${KEY_FILE}
+  SSLProtocol           all -SSLv3 -TLSv1 -TLSv1.1
+
+  Alias /PROD/ ${DEPOT_ROOT}/${DEPOT_NAME}/PROD/
+  <Directory ${DEPOT_ROOT}/${DEPOT_NAME}/PROD/>
+    Options Indexes FollowSymLinks
+    AllowOverride None
+    AuthType Basic
+    AuthName "VCF Depot"
+    AuthUserFile ${HTPASSWD_FILE}
+    Require valid-user
+  </Directory>
+
+  ErrorLog  /var/log/httpd/vcf91-depot-error.log
+  CustomLog /var/log/httpd/vcf91-depot-access.log combined
+</VirtualHost>
+EOF
+
+    apachectl configtest
+    systemctl enable httpd
+    systemctl restart httpd
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -401,12 +514,26 @@ configure_selinux() {
 # ---------------------------------------------------------------------------
 configure_firewall() {
   [[ "${OPEN_FIREWALL}" == "true" ]] || return 0
-  if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld; then
-    info "Opening firewall: TCP/${DEPOT_PORT}"
+
+  # firewalld — RHEL / CentOS / Rocky / AlmaLinux
+  if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then
+    info "firewalld: opening TCP/${DEPOT_PORT}"
     firewall-cmd --permanent --add-port="${DEPOT_PORT}/tcp"
     firewall-cmd --reload
+
+  # ufw — Ubuntu / Debian (default on Ubuntu 24.04)
+  elif command -v ufw >/dev/null 2>&1; then
+    if ufw status 2>/dev/null | grep -q "^Status: active"; then
+      info "ufw: allowing TCP/${DEPOT_PORT}"
+      ufw allow "${DEPOT_PORT}/tcp"
+    else
+      warn "ufw is installed but NOT active. Rules not applied."
+      warn "To enable: sudo ufw enable && sudo ufw allow ${DEPOT_PORT}/tcp"
+    fi
+
   else
-    warn "firewalld not active; skip firewall config"
+    warn "No firewall manager found (firewalld / ufw)."
+    warn "If needed, open TCP/${DEPOT_PORT} manually."
   fi
 }
 
@@ -546,6 +673,7 @@ main() {
   info "VCF 9.1 Offline Depot (Apache2) — v${SCRIPT_VERSION}"
 
   install_packages
+  setup_data_disk
   detect_web_user
   create_depot_tree
   create_certificate
