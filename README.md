@@ -1,146 +1,219 @@
 # vcf9offlinescript
 
-Scripts for standing up an **offline VCF Software Depot** for VMware Cloud Foundation 9.x.
+Scripts for standing up an **offline VCF Software Depot** for VMware Cloud Foundation 9.x,
+and importing the depot CA certificate into VCF Installer, SDDC Manager, and VCF OPS appliances.
 
-## Scripts
+---
 
-| Script | Web Server | VCF | Protocol | Auth | Notes |
+## Quick start — VCF 9.1 (recommended)
+
+```bash
+# 1. Set up the depot server (nginx, fresh Ubuntu VM with a second disk)
+sudo bash create_vcf9_depot_server_v5.sh \
+  --fqdn vcf91-depot.lab --ip 10.0.0.80 \
+  --web-server nginx \
+  --data-disk /dev/sdb \
+  --activation-code /root/activation-code.txt \
+  --download-tool-tgz /root/vcf-download-tool-9.1.0.0.tar.gz \
+  --download-binaries \
+  --import-ca
+
+# 2. On the VCF Installer appliance — import the depot cert
+sudo bash import_vcf9depot_ca.sh \
+  --url-insecure https://vcf91-depot.lab \
+  --vcf-installer
+
+# 3. On SDDC Manager (after deployment)
+sudo bash import_vcf9depot_ca.sh \
+  --url-insecure https://vcf91-depot.lab \
+  --sddc-manager
+
+# 4. On VCF OPS appliance
+sudo bash import_vcf9depot_ca.sh \
+  --url-insecure https://vcf91-depot.lab \
+  --vcf-ops
+```
+
+---
+
+## All scripts
+
+### Depot server scripts
+
+| Script | Web server | VCF | Protocol | Auth | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `create_vcf9_depot_server.sh` | nginx | 9.0.x | HTTPS | Basic | Original |
-| `create_vcf9_depot_server_v2.sh` | nginx | 9.0.x | HTTPS + HTTP | Basic | Adds HTTP redirect |
-| `create_vcf9_depot_server_v3.sh` | nginx | 9.1 | HTTP | **None** | VCF 9.1 new no-auth mode via API |
-| `create_vcf9_depot_server_v4_nginx.sh` | **nginx** | **9.1** | HTTPS + HTTP | Basic | 9.1 + activation-code download |
-| `create_vcf9_depot_server_v4_apache.sh` | **Apache2** | **9.1** | HTTPS | Basic | Based on vstellar.com Part 4 |
-| `import_vcf9depot_ca.sh` | — | — | — | — | Import depot cert into system + Java truststores |
-| `fix_sshd_config.sh` | — | — | — | — | Fix duplicate sshd_config entries |
-| `sftpv1.sh` / `test_sftp.sh` | — | — | — | — | SFTP setup and connectivity test |
+| `create_vcf9_depot_server_v2.sh` | nginx | 9.0.x | HTTPS + HTTP | Basic | HTTP redirect |
+| `create_vcf9_depot_server_v3.sh` | nginx | 9.1 | HTTP | **None** | VCF 9.1 no-auth via API |
+| `create_vcf9_depot_server_v4_nginx.sh` | nginx | 9.1 | HTTPS + HTTP | Basic | 9.1 + Ubuntu fixes |
+| `create_vcf9_depot_server_v4_apache.sh` | Apache2 | 9.1 | HTTPS | Basic | vstellar.com Part 4 |
+| **`create_vcf9_depot_server_v5.sh`** | **nginx or apache** | **9.1** | **HTTPS** | **Basic** | **⭐ Recommended — unified** |
 
-## Choosing a script
+### CA import script
 
-```
-Need VCF 9.1 HTTPS + basic auth?
-  ├─ Prefer nginx   → create_vcf9_depot_server_v4_nginx.sh
-  └─ Prefer Apache2 → create_vcf9_depot_server_v4_apache.sh   ← follows vstellar.com Part 4
+| Script | Version | Notes |
+| --- | --- | --- |
+| **`import_vcf9depot_ca.sh`** | **v2.0** | System trust store + Java cacerts. Supports VCF Installer, VCF OPS, SDDC Manager (Photon OS). |
 
-Need VCF 9.1 HTTP with NO auth (new 9.1 feature)?
-  └─ create_vcf9_depot_server_v3.sh   (must configure via VCF Installer API, not UI)
+### Other scripts
 
-Need VCF 9.0.x?
-  ├─ HTTPS only       → create_vcf9_depot_server.sh
-  └─ HTTPS + HTTP     → create_vcf9_depot_server_v2.sh
-```
+| Script | Notes |
+| --- | --- |
+| `fix_sshd_config.sh` | Fix duplicate sshd_config entries from sftpv1.sh |
+| `sftpv1.sh` / `test_sftp.sh` | SFTP setup and connectivity test |
 
-## VCF 9.1 — HTTPS + basic auth (v4)
+---
 
-Two equivalent scripts — same flags, same behaviour, different web server.
+## v5 — Unified depot server (⭐ recommended)
 
-### nginx version
+`create_vcf9_depot_server_v5.sh` replaces the separate v4_nginx / v4_apache scripts.
+Choose the web server with `--web-server nginx` (default) or `--web-server apache`.
 
-```bash
-# Minimal
-sudo bash create_vcf9_depot_server_v4_nginx.sh \
-  --fqdn vcf91-depot.lab --ip 10.0.0.80
+### What v5 handles on a fresh Ubuntu VM
 
-# Full: download binaries + import cert
-sudo bash create_vcf9_depot_server_v4_nginx.sh \
-  --fqdn vcf91-depot.lab --ip 10.0.0.80 \
-  --activation-code /root/activation-code.txt \
-  --download-tool-tgz /root/vcf-download-tool-9.1.0.0.tar.gz \
-  --download-binaries \
-  --import-ca
-```
+| Problem | v4 | v5 |
+| --- | --- | --- |
+| Firewall (Ubuntu uses ufw, not firewalld) | ❌ silently skipped | ✅ auto-detects ufw / firewalld |
+| Second data disk for depot files | ❌ not handled | ✅ `--data-disk /dev/sdb` |
+| keytool / JRE not installed | ❌ silently skipped | ✅ installs `default-jre-headless` with `--import-ca` |
+| Apache 403 on `/PROD/` (outside DocumentRoot) | ❌ symlink broke | ✅ `Alias + <Directory>` |
+| RHEL httpd path | apache only | ✅ `/etc/httpd/conf.d/vcf9-depot-ssl.conf` |
 
-### Apache2 version (vstellar.com Part 4)
-
-```bash
-# Minimal
-sudo bash create_vcf9_depot_server_v4_apache.sh \
-  --fqdn vcf91-repo.cmb1.lab --ip 10.0.0.80
-
-# Full: download binaries + import cert, custom cert subject
-sudo bash create_vcf9_depot_server_v4_apache.sh \
-  --fqdn vcf91-repo.cmb1.lab --ip 10.0.0.80 \
-  --org "Thinkon" --ou "Cloud-Services" \
-  --activation-code /root/activation-code.txt \
-  --download-tool-tgz /root/vcf-download-tool-9.1.0.0.tar.gz \
-  --download-binaries \
-  --import-ca
-```
-
-### Common flags (both v4 scripts)
+### v5 flags
 
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--fqdn` | *(required)* | FQDN of the depot server |
 | `--ip` | *(required)* | Server IP (used in cert SAN) |
-| `--vcf-version` | `9.1.0.0` | VCF version to download |
-| `--user` | `vcfadmin` | Basic auth username |
-| `--password` | `VMware1!VMware1!` | Basic auth password |
+| `--web-server` | `nginx` | `nginx` or `apache` |
+| `--vcf-version` | `9.1.0.0` | VCF version string |
 | `--port` | `443` | HTTPS port |
+| `--http-port` | `80` | HTTP redirect port (nginx only) |
+| `--user` | `vcfdepot` | Basic auth username |
+| `--password` | `VMware1!VMware1!` | Basic auth password |
+| `--data-disk` | — | Block device to format + mount as `/var/www/html` |
+| `--skip-disk-setup` | — | Skip disk format/mount |
 | `--activation-code` | — | `activation-code.txt` from Broadcom (VCF 9.1) |
-| `--token-file` | — | Download token file (VCF 9.0 legacy) |
+| `--token-file` | — | Download token file (VCF 9.0 legacy, still works) |
 | `--download-tool-tgz` | — | Path to `vcf-download-tool-*.tar.gz` |
 | `--download-binaries` | — | Run download after setup |
 | `--download-type` | `INSTALL` | `INSTALL` / `UPGRADE` / `ALL` |
-| `--import-ca` | — | Auto-import cert into system + Java truststores |
-| `--ca-url` | — | Fetch CA from URL (instead of local cert file) |
+| `--import-ca` | — | Import cert into system + Java truststores (installs JRE if needed) |
+| `--ca-url` | — | Fetch CA from URL instead of local cert |
+| `--existing-cert` | — | Use an existing PEM cert (skip generation) |
+| `--existing-key` | — | Use an existing PEM key (skip generation) |
+| `--skip-firewall` | — | Skip firewall config |
 
-### What each v4 script generates under `/opt/vcf-depot`
+### v5 examples
 
-- `download-vcf9-binaries.sh` — re-runnable download wrapper (supports both activation-code and token-file)
+```bash
+# nginx, fresh Ubuntu + second disk + download binaries
+sudo bash create_vcf9_depot_server_v5.sh \
+  --fqdn vcf91-depot.lab --ip 10.0.0.80 \
+  --web-server nginx \
+  --data-disk /dev/sdb \
+  --activation-code /root/activation-code.txt \
+  --download-tool-tgz /root/vcf-download-tool-9.1.0.0.tar.gz \
+  --download-binaries \
+  --import-ca
 
-Both scripts call `import_vcf9depot_ca.sh` (must be in the same directory) when `--import-ca` is set.
+# Apache2, custom cert subject (e.g. internal CA workflow)
+sudo bash create_vcf9_depot_server_v5.sh \
+  --fqdn vcf91-repo.cmb1.lab --ip 10.0.0.80 \
+  --web-server apache \
+  --org "Thinkon" --ou "Cloud-Services" \
+  --data-disk /dev/sdb \
+  --import-ca
+
+# nginx, disk already mounted, no download yet
+sudo bash create_vcf9_depot_server_v5.sh \
+  --fqdn vcf91-depot.lab --ip 10.0.0.80 \
+  --skip-disk-setup
+```
 
 ---
 
-## VCF 9.1 — HTTP offline depot (v3, no-auth)
+## CA import — `import_vcf9depot_ca.sh` v2
 
-VCF 9.1 adds native support for an offline depot over **plain HTTP with no basic authentication**.
+Run as **root on the target machine** (VCF Installer, SDDC Manager, VCF OPS).
+All three appliance types run **Photon OS** — v2 adds full Photon OS support.
 
-| Protocol | Basic Auth | 9.0.x | 9.1.0 | Behavior |
-| --- | --- | --- | --- | --- |
-| HTTPS | yes | ✅ | ✅ | Default |
-| HTTPS | no | ❌ | ❌ | Not supported |
-| HTTP | yes | ✅ | ✅ | Legacy workaround |
-| HTTP | no | ❌ | ✅ | **New in 9.1 — API only** (v3) |
+### What v2 covers
 
-> The VCF 9.1 Installer **UI does not** support HTTP offline depots.
-> Use the VCF Installer **API**. Configuration is automatically propagated to the Fleet Depot Service.
+| | v1 (old) | v2 (new) |
+| --- | --- | --- |
+| Ubuntu / RHEL system trust store | ✅ | ✅ |
+| **Photon OS** system trust store | ❌ | ✅ `c_rehash` + `update-ca-trust` |
+| Generic JVM (`/usr/lib/jvm`) | ✅ | ✅ |
+| **VCF Installer** bundled JRE | ❌ | ✅ `--vcf-installer` |
+| **VCF OPS** bundled JRE | ❌ | ✅ `--vcf-ops` |
+| **SDDC Manager** bundled JRE | ❌ | ✅ `--sddc-manager` |
+| Service restart after import | ❌ | ✅ (all component services) |
+
+### v2 flags
+
+| Flag | Description |
+| --- | --- |
+| `--cert PATH` | Local PEM certificate file |
+| `--url URL` | Fetch cert via HTTPS (TLS verified) |
+| `--url-insecure URL` | Fetch server cert via `openssl s_client` (no TLS verify) |
+| `--vcf-installer` | Add VCF Installer JRE paths + restart `vcf-installer` |
+| `--vcf-ops` | Add VCF OPS (Aria Ops) JRE paths + restart its services |
+| `--sddc-manager` | Add SDDC Manager JRE paths + restart its services |
+| `--all-components` | Short for all three above |
+| `--no-restart` | Skip service restarts (useful for testing) |
+| `--alias NAME` | keytool alias (default: `vcf9depot-ca`) |
+
+### v2 examples
 
 ```bash
-# HTTP no-auth (port 8888 default)
-sudo bash create_vcf9_depot_server_v3.sh --fqdn depot.home.lab --ip 10.0.0.60
+# VCF Installer appliance — fetch cert from depot, import + restart
+sudo bash import_vcf9depot_ca.sh \
+  --url-insecure https://vcf91-depot.lab \
+  --vcf-installer
 
-# Apply via VCF Installer API
+# SDDC Manager — use a cert file already copied over
+sudo bash import_vcf9depot_ca.sh \
+  --cert /tmp/vcf9-depot.crt \
+  --sddc-manager
+
+# VCF OPS appliance
+sudo bash import_vcf9depot_ca.sh \
+  --cert /tmp/vcf9-depot.crt \
+  --vcf-ops
+
+# All components at once, no restart (dry-run style)
+sudo bash import_vcf9depot_ca.sh \
+  --cert /tmp/vcf9-depot.crt \
+  --all-components \
+  --no-restart
+```
+
+> **"Invalid credentials" in VCF Installer when creds are correct?**
+> This error is misleading — it means the depot certificate has **not** been imported
+> into the Java truststore. Run `import_vcf9depot_ca.sh --vcf-installer` and retry.
+
+---
+
+## VCF 9.1 — HTTP no-auth depot (v3)
+
+VCF 9.1 added native support for an offline depot served over plain HTTP with no auth.
+
+| Protocol | Auth | 9.0.x | 9.1 | Notes |
+| --- | --- | --- | --- | --- |
+| HTTPS | Basic | ✅ | ✅ | Default — use v5 |
+| HTTP | Basic | ✅ | ✅ | Legacy workaround |
+| HTTP | **None** | ❌ | ✅ | **v3 — VCF Installer API only** |
+
+> The VCF 9.1 Installer **UI** does not support HTTP depots. Use the **API**.
+
+```bash
 sudo bash create_vcf9_depot_server_v3.sh \
   --fqdn depot.home.lab --ip 10.0.0.60 \
   --vcf-installer-fqdn sddcm01.vcf.lab \
   --vcf-installer-password 'VMware1!VMware1!' \
   --configure-installer
 ```
-
-`create_vcf9_depot_server_v3.sh` also generates:
-- `configure-vcf-installer-depot.sh` — bash/curl helper to apply depot config via API
-- `configure-vcf-installer-depot.ps1` — PowerShell equivalent
-- `download-vcf9-binaries.sh` — vcf-download-tool wrapper
-
----
-
-## CA import (`import_vcf9depot_ca.sh`)
-
-Run on any machine that needs to trust the depot certificate (SDDC Manager, VCF Installer, etc.):
-
-```bash
-# Import from a local cert file
-sudo bash import_vcf9depot_ca.sh --cert /path/to/vcf9-depot.crt
-
-# Fetch cert directly from the depot server (useful when running on SDDC Manager)
-sudo bash import_vcf9depot_ca.sh --url-insecure https://vcf91-depot.lab:443
-```
-
-> **"Invalid credentials" when adding depot in VCF Installer?**
-> This error is misleading — it almost always means the depot certificate has
-> **not** been imported into the Java truststore. Import the cert and retry.
 
 ---
 
