@@ -55,10 +55,11 @@ sudo bash import_vcf9depot_ca.sh \
 | --- | --- | --- |
 | **`import_vcf9depot_ca.sh`** | **v2.0** | System trust store + Java cacerts. Supports VCF Installer, VCF OPS, SDDC Manager (Photon OS). |
 
-### Other scripts
+### Post-setup maintenance scripts
 
 | Script | Notes |
 | --- | --- |
+| **`change_depot_hostname_ip.sh`** | **Change hostname and/or IP after initial setup — regenerates cert automatically** |
 | `fix_sshd_config.sh` | Fix duplicate sshd_config entries from sftpv1.sh |
 | `sftpv1.sh` / `test_sftp.sh` | SFTP setup and connectivity test |
 
@@ -214,6 +215,70 @@ sudo bash create_vcf9_depot_server_v3.sh \
   --vcf-installer-password 'VMware1!VMware1!' \
   --configure-installer
 ```
+
+---
+
+## Changing hostname / IP after setup — `change_depot_hostname_ip.sh`
+
+Run on the depot server itself when you need to rename or re-IP it after initial setup.
+
+### What it does
+
+| Step | Action |
+| --- | --- |
+| 1 | `hostnamectl set-hostname` + update `/etc/hosts` |
+| 2 | Update static IP via **netplan** (Ubuntu) or **nmcli** (RHEL) |
+| 3 | **Regenerate TLS certificate** with new CN + SAN (FQDN + IP) |
+| 4 | Update `server_name` in nginx / apache2 / httpd config + reload |
+| 5 | Print exact `import_vcf9depot_ca.sh` commands to re-import the new cert |
+
+### Usage
+
+```bash
+# Change both hostname and IP
+sudo bash change_depot_hostname_ip.sh \
+  --fqdn vcf91-depot.lab \
+  --ip 10.0.1.80 \
+  --gw 10.0.1.1
+
+# Change hostname only (keep IP)
+sudo bash change_depot_hostname_ip.sh \
+  --fqdn vcf91-depot.lab
+
+# Change IP only (keep hostname)
+sudo bash change_depot_hostname_ip.sh \
+  --ip 10.0.1.80 --gw 10.0.1.1
+```
+
+### Flags
+
+| Flag | Description |
+| --- | --- |
+| `--fqdn` | New FQDN (e.g. `vcf91-depot.lab`) |
+| `--ip` | New static IP (e.g. `10.0.1.80`) |
+| `--gw` | New gateway (keeps current if omitted) |
+| `--prefix` | Subnet prefix, default `24` |
+| `--country/--state/--city/--org/--ou` | Override cert subject fields |
+| `--no-cert-regen` | Skip certificate regeneration (not recommended) |
+| `--no-restart` | Skip web server reload |
+
+### After running — re-import cert on VCF components
+
+The TLS cert is regenerated with the new hostname/IP.
+**Re-import on every machine that connects to the depot:**
+
+```bash
+# VCF Installer
+sudo bash import_vcf9depot_ca.sh --url-insecure https://<NEW_FQDN> --vcf-installer
+
+# SDDC Manager
+sudo bash import_vcf9depot_ca.sh --url-insecure https://<NEW_FQDN> --sddc-manager
+
+# VCF OPS
+sudo bash import_vcf9depot_ca.sh --url-insecure https://<NEW_FQDN> --vcf-ops
+```
+
+Also update the Depot URL in **VCF Installer → Administration → Depot Settings**.
 
 ---
 
