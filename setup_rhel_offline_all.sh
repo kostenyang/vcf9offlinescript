@@ -271,7 +271,8 @@ distinguished_name=dn
 CN=${FQDN}
 [v3_req]
 subjectAltName=@alt_names
-keyUsage=critical,digitalSignature,keyEncipherment
+basicConstraints=critical,CA:TRUE
+keyUsage=critical,digitalSignature,keyEncipherment,keyCertSign,cRLSign
 extendedKeyUsage=serverAuth
 [alt_names]
 DNS.1=${FQDN}

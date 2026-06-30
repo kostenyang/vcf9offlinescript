@@ -424,7 +424,8 @@ CN = ${DEPOT_FQDN}
 
 [v3_req]
 subjectAltName = @alt_names
-keyUsage = critical, digitalSignature, keyEncipherment
+basicConstraints = critical, CA:TRUE
+keyUsage = critical, digitalSignature, keyEncipherment, keyCertSign, cRLSign
 extendedKeyUsage = serverAuth
 
 [alt_names]
@@ -457,7 +458,8 @@ CN = ${DEPOT_FQDN}
 
 [v3_req]
 subjectAltName = @alt_names
-keyUsage = critical, digitalSignature, keyEncipherment
+basicConstraints = critical, CA:TRUE
+keyUsage = critical, digitalSignature, keyEncipherment, keyCertSign, cRLSign
 extendedKeyUsage = serverAuth
 
 [alt_names]
