@@ -369,7 +369,7 @@ server {
 EOF
 
   nginx -t
-  systemctl enable --now nginx
+  systemctl enable nginx >/dev/null 2>&1 || true; systemctl reload nginx 2>/dev/null || systemctl restart nginx
 }
 
 # ---------------------------------------------------------------------------
