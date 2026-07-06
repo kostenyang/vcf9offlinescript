@@ -153,6 +153,68 @@ for the live lab layout.
 
 ---
 
+## 5b. Getting binaries INTO the VCF Installer / SDDC Manager
+
+There are two ways to make downloaded binaries available to VCF:
+
+### Method A — Offline Depot (URL) *(recommended, what the lab uses)*
+
+Download to a directory, serve it over HTTP(S), and point the VCF Installer /
+SDDC Manager at the **depot URL**. It pulls what it needs. Nothing runs on the
+appliance itself.
+
+```
+vcf-download-tool binaries download  →  /opt/vcf-depot/vcf9  →  nginx :8888
+VCF Installer depot setting: url = http://<DEPOT_IP>:8888
+```
+
+Set it via the VCF Installer API (the UI cannot do HTTP no-auth depots):
+
+```bash
+TOKEN=$(curl -sk -X POST https://<INSTALLER>/v1/tokens \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin@local","password":"<PASSWORD>"}' \
+  | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
+curl -sk -X PUT https://<INSTALLER>/v1/system/settings/depot \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"depotConfiguration":{"isOfflineDepot":true,"hostname":"<DEPOT_IP>","port":8888,"url":"http://<DEPOT_IP>:8888"}}'
+```
+
+### Method B — Direct upload into SDDC Manager (`binaries upload`)
+
+Push the binaries **directly into the SDDC Manager's internal store** — no
+separate depot web server needed.
+
+> **Prerequisites (from the tool):** the downloaded binaries must first be
+> **transferred onto the SDDC Manager appliance**, and the command must be run
+> **from within the SDDC Manager**.
+
+```bash
+# 1) download on any box
+vcf-download-tool binaries download --sku VCF --vcf-version 9.1.0 \
+  --automated-install --depot-download-token-file /root/token.txt \
+  --depot-store /data/vcf-depot/vcf9
+
+# 2) copy /data/vcf-depot/vcf9 onto the SDDC Manager appliance (scp / rsync)
+
+# 3) ON the SDDC Manager, run:
+echo '<SDDC_MANAGER_PASSWORD>' > /root/sddcpass.txt; chmod 600 /root/sddcpass.txt
+vcf-download-tool binaries upload \
+  --depot-store=/data/vcf-depot/vcf9 \
+  --sddc-manager-fqdn=<SDDC_MANAGER_FQDN> \
+  --sddc-manager-user=<admin_user> \
+  --sddc-manager-user-password-file=/root/sddcpass.txt
+```
+
+| | Method A (Depot URL) | Method B (Direct upload) |
+| --- | --- | --- |
+| Use when | Initial deploy (VCF Installer) + ongoing | You already have an SDDC Manager |
+| Web server needed | yes (nginx/apache) | no |
+| Runs where | depot server | inside SDDC Manager |
+| Binaries live | on the depot server | pushed into SDDC Manager |
+
+---
+
 ## 6. Real lab example (10.0.0.61)
 
 ```bash
