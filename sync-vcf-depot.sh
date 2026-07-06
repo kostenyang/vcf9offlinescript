@@ -21,12 +21,22 @@ SCRIPT_NAME="$(basename "$0")"
 DEPOT_STORE="/opt/vcf-depot/vcf9"     # depot-store root; PROD/ lives under it
 TARGET_HOST=""                         # e.g. 10.0.0.61
 TARGET_USER="root"
-WEB_USER="www-data"                    # Ubuntu nginx=www-data; RHEL nginx/apache=nginx/apache
+WEB_USER=""                            # auto-detected if empty (nginx / www-data)
 RELOAD_CMD="systemctl reload nginx"    # web server reload on target
 DO_RELOAD="true"
 FIX_PERMS="true"
 DRY_RUN="false"
+LOCAL="false"                          # --local: fix a locally-copied depot (no rsync/SSH)
+VERIFY_URL=""                          # --verify-url: curl a manifest URL after fixing
 SSH_PORT="22"
+
+# Auto-detect the web user for THIS host (used in --local mode / as default).
+detect_web_user() {
+  if id nginx    >/dev/null 2>&1; then echo "nginx"
+  elif id www-data >/dev/null 2>&1; then echo "www-data"
+  elif id apache >/dev/null 2>&1; then echo "apache"
+  else echo "nginx"; fi
+}
 
 green()  { printf '\033[0;32m%s\033[0m\n' "$*"; }
 yellow() { printf '\033[1;33m%s\033[0m\n' "$*"; }
@@ -37,32 +47,40 @@ die()    { red     "[ERROR] $*"; exit 1; }
 
 usage() {
   cat <<EOF
-Usage: ${SCRIPT_NAME} --target HOST [options]
+Usage:
+  ${SCRIPT_NAME} --target HOST [options]     # PUSH: rsync depot to a serving node
+  ${SCRIPT_NAME} --local     [options]       # LOCAL: fix a depot you copied by hand (USB, etc.)
 
-Publish this machine's VCF offline depot to a serving node.
-
-Required:
-  --target HOST            Target serving node (IP or FQDN), e.g. 10.0.0.61
+Two modes:
+  PUSH  (--target) : run on the SOURCE (download-tool box); rsync the depot to
+                     the target serving node, fix perms there, reload, verify.
+  LOCAL (--local)  : run ON the depot server AFTER you copied files into it
+                     (USB / scp / tar). No rsync/SSH — just fix ownership +
+                     permissions + SELinux on the local depot, reload, verify.
 
 Options:
-  --user USER              SSH user on target. Default: ${TARGET_USER}
-  --depot-store PATH       Depot-store root on BOTH sides. Default: ${DEPOT_STORE}
-  --web-user USER          Web user to own files on target. Default: ${WEB_USER}
-  --reload-cmd "CMD"       Web server reload command on target. Default: "${RELOAD_CMD}"
-  --no-reload              Do not reload the web server on target
-  --no-perms               Do not chown/chmod on target
-  --port PORT              SSH port. Default: ${SSH_PORT}
-  --dry-run                rsync --dry-run (show what would transfer, change nothing)
+  --target HOST            (PUSH) Target serving node (IP or FQDN)
+  --local                  (LOCAL) Fix the depot on THIS host (no transfer)
+  --user USER              (PUSH) SSH user on target. Default: ${TARGET_USER}
+  --depot-store PATH       Depot-store root. Default: ${DEPOT_STORE}
+  --web-user USER          Web user that must own the files. Default: auto (nginx/www-data)
+  --reload-cmd "CMD"       Web server reload command. Default: "${RELOAD_CMD}"
+  --verify-url URL         (LOCAL) curl this URL after fixing (e.g. depot manifest)
+  --no-reload              Do not reload the web server
+  --no-perms               Do not chown/chmod
+  --port PORT              (PUSH) SSH port. Default: ${SSH_PORT}
+  --dry-run                (PUSH) rsync --dry-run
   -h, --help               Show this help
 
 Examples:
-  # Push to the nginx depot at 10.0.0.61 (Ubuntu, www-data)
+  # PUSH to a serving node (run on the download box)
   sudo bash ${SCRIPT_NAME} --target 10.0.0.61
 
-  # Preview only
-  sudo bash ${SCRIPT_NAME} --target 10.0.0.61 --dry-run
+  # LOCAL — you copied PROD/ onto the depot via USB; fix + verify it (run on depot)
+  sudo bash ${SCRIPT_NAME} --local \\
+    --verify-url http://localhost:8888/PROD/metadata/manifest/v1/vcfManifest.json
 
-  # RHEL target served by Apache
+  # RHEL target served by Apache (PUSH)
   sudo bash ${SCRIPT_NAME} --target depot.example.lab \\
     --web-user apache --reload-cmd "systemctl reload httpd"
 EOF
@@ -72,10 +90,12 @@ parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --target)      TARGET_HOST="${2:-}";  shift 2 ;;
+      --local)       LOCAL="true";          shift 1 ;;
       --user)        TARGET_USER="${2:-}";  shift 2 ;;
       --depot-store) DEPOT_STORE="${2:-}";  shift 2 ;;
       --web-user)    WEB_USER="${2:-}";     shift 2 ;;
       --reload-cmd)  RELOAD_CMD="${2:-}";   shift 2 ;;
+      --verify-url)  VERIFY_URL="${2:-}";   shift 2 ;;
       --no-reload)   DO_RELOAD="false";     shift 1 ;;
       --no-perms)    FIX_PERMS="false";     shift 1 ;;
       --port)        SSH_PORT="${2:-}";     shift 2 ;;
@@ -84,11 +104,63 @@ parse_args() {
       *) die "Unknown argument: $1  (run with --help)" ;;
     esac
   done
-  [[ -n "${TARGET_HOST}" ]] || die "--target is required"
+  if [[ "${LOCAL}" == "true" ]]; then
+    [[ -z "${TARGET_HOST}" ]] || die "Use either --local OR --target, not both"
+  else
+    [[ -n "${TARGET_HOST}" ]] || die "Provide --target HOST (push) or --local (fix a copied depot)"
+  fi
+  [[ -n "${WEB_USER}" ]] || WEB_USER="$(detect_web_user)"
+}
+
+# ---------------------------------------------------------------------------
+# LOCAL mode — fix a depot whose files were copied in by hand (USB / scp / tar).
+# ---------------------------------------------------------------------------
+do_local() {
+  [[ "${EUID}" -eq 0 ]] || die "LOCAL mode must run as root (sudo)."
+  local prod="${DEPOT_STORE}/PROD"
+  [[ -d "${prod}" ]] || die "No depot at ${prod} — copy the PROD/ tree there first."
+
+  info "LOCAL fix of depot: ${prod}"
+  info "Web user: ${WEB_USER}"
+  info "Contents: $(find "${prod}" -type f 2>/dev/null | wc -l) files, $(du -sh "${prod}" 2>/dev/null | cut -f1)"
+
+  if [[ "${FIX_PERMS}" == "true" ]]; then
+    info "Fixing ownership + permissions"
+    chown -R "${WEB_USER}:${WEB_USER}" "${prod}"
+    find "${prod}" -type d -exec chmod 0755 {} +
+    find "${prod}" -type f -exec chmod 0644 {} +
+    if command -v restorecon >/dev/null 2>&1; then
+      info "Restoring SELinux context"
+      restorecon -R "${prod}" >/dev/null 2>&1 || true
+    fi
+    green "[ OK ] ownership/permissions fixed"
+  fi
+
+  if [[ "${DO_RELOAD}" == "true" ]]; then
+    info "Reloading web server: ${RELOAD_CMD}"
+    ${RELOAD_CMD} 2>/dev/null || warn "Reload failed/not needed (static files don't require it)"
+  fi
+
+  if [[ -n "${VERIFY_URL}" ]]; then
+    info "Verifying: ${VERIFY_URL}"
+    local code; code="$(curl -sk -o /dev/null -w '%{http_code}' "${VERIFY_URL}" 2>/dev/null || echo 000)"
+    if [[ "${code}" == "200" || "${code}" == "401" ]]; then
+      green "[ OK ] depot serving: HTTP ${code}"
+    else
+      warn "depot returned HTTP ${code} — check path/perms/SELinux/web-server config"
+    fi
+  fi
+
+  green "[ OK ] LOCAL depot fix done: ${prod}"
 }
 
 main() {
   parse_args "$@"
+
+  if [[ "${LOCAL}" == "true" ]]; then
+    do_local
+    exit 0
+  fi
 
   local src="${DEPOT_STORE}/PROD"
   local remote="${TARGET_USER}@${TARGET_HOST}"
