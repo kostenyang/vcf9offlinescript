@@ -301,14 +301,36 @@ install_packages() {
       ;;
 
     apt)
-      apt-get update -y
       local pkgs="openssl apache2-utils jq tar curl unzip ca-certificates"
       [[ "${WEB_SERVER}" == "nginx" ]]  && pkgs+=" nginx"
       [[ "${WEB_SERVER}" == "apache" ]] && pkgs+=" apache2"
       # default-jre-headless provides keytool for Java truststore import.
-      # On a fresh Ubuntu there is no JRE at all — install it when needed.
       [[ "${IMPORT_CA}" == "true" ]]    && pkgs+=" default-jre-headless"
-      DEBIAN_FRONTEND=noninteractive apt-get install -y ${pkgs}
+
+      # Which requested packages are NOT yet installed?
+      local missing=""
+      for p in ${pkgs}; do
+        dpkg -s "${p}" >/dev/null 2>&1 || missing+=" ${p}"
+      done
+
+      if [[ -z "${missing// /}" ]]; then
+        info "All required packages already installed — skipping apt (air-gapped OK)"
+      else
+        info "Packages to install:${missing}"
+        # apt needs internet OR a local apt mirror. On air-gapped Ubuntu this
+        # fails — install the packages offline first, then re-run this script.
+        if apt-get update -y >/dev/null 2>&1 \
+           && DEBIAN_FRONTEND=noninteractive apt-get install -y ${missing}; then
+          info "Installed:${missing}"
+        else
+          die "apt could not install:${missing}
+  No internet / no apt source (air-gapped?). Install the packages OFFLINE first,
+  then re-run this script:
+    sudo bash ubuntu_offline_packages.sh --install --bundle ubuntu-nginx-offline-<rel>-amd64.tar.gz
+  Pre-built bundles (20.04/22.04/24.04):
+    https://github.com/kostenyang/vcf9offlinescript/releases"
+        fi
+      fi
       ;;
   esac
 }
