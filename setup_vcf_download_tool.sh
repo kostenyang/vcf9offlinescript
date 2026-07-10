@@ -193,7 +193,8 @@ else
   echo "No credential (token-file / activation-code) configured." >&2; exit 1
 fi
 
-"\${TOOL_BIN}" binaries download \${CRED} \\
+# 'echo N' answers the tool's first-run CEIP(Y/N) prompt non-interactively
+echo 'N' | "\${TOOL_BIN}" binaries download \${CRED} \\
   --vcf-version "\${VCF_VERSION}" \\
   --automated-install \\
   --depot-store "\${DEPOT_STORE}" \\
@@ -214,7 +215,8 @@ list_binaries() {
   [[ -n "${ACTIVATION_CODE_FILE}" ]] \
     && cred="--depot-download-activation-code-file ${ACTIVATION_CODE_FILE}" \
     || cred="--depot-download-token-file ${tokfile}"
-  "${bin}" binaries list --sku VCF --vcf-version "${VCF_VERSION}" ${cred} \
+  # 'echo N' answers the first-run CEIP(Y/N) prompt non-interactively
+  echo 'N' | "${bin}" binaries list --sku VCF --vcf-version "${VCF_VERSION}" ${cred} \
     --type "${DOWNLOAD_TYPE}" --automated-install 2>&1 | tail -40
 }
 
