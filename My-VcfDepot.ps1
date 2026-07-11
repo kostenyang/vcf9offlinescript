@@ -42,6 +42,7 @@ param(
   [string]$FileNameLike,                       # wildcard filter on fileName (e.g. '*1.33*'); omit for all
   [switch]$Download,                           # download the (filtered) binaries
   [switch]$Metadata,                           # lay down catalog + manifest + vSAN HCL metadata
+  [switch]$LatestOnly,                          # keep only the newest productVersion per component (skip older patch levels)
   [switch]$BuildDepot,                         # one-shot: -Metadata + -Download of the mgmt/bring-up component set
   [string]$OutDir = '.\vcf9-depot',            # depot-store root
   [switch]$Summary,                            # print only the per-component summary
@@ -70,7 +71,13 @@ $patch = $root.patches[0]
 # flatten catalog -> one row per binary (honour -Component / -Type / -FileNameLike filters)
 $rows = foreach ($comp in $patch.PSObject.Properties.Name) {
   if ($Component -and $comp -notin $Component) { continue }
-  foreach ($ver in $patch.$comp) {
+  $vers = $patch.$comp
+  if ($LatestOnly) {   # newest = largest build number (last run of digits in productVersion, e.g. ...0300.25536194)
+    $vers = @($vers | Sort-Object {
+      $m=[regex]::Matches($_.productVersion,'\d+'); if($m.Count){[long]$m[$m.Count-1].Value}else{0}
+    } | Select-Object -Last 1)
+  }
+  foreach ($ver in $vers) {
     foreach ($b in $ver.artifacts.bundles) {
       if ($Type -and $b.type -ne $Type) { continue }
       foreach ($bin in $b.binaries) {

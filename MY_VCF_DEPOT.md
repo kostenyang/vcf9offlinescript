@@ -120,6 +120,7 @@ the official tool, or copy the two files from an existing depot.
 | `-Summary` | per-component file count + size only |
 | `-Download` | download the filtered binaries (sha256-verified, resume-safe, idempotent) |
 | `-Metadata` | lay down catalog + manifest + vSAN HCL metadata |
+| `-LatestOnly` | keep only the newest `productVersion` per component (skip older patch levels) |
 | `-BuildDepot` | one-shot: `-Metadata` + `-Download` of the mgmt/bring-up component set |
 | `-OutDir` | depot-store root (default `.\vcf9-depot`) |
 | `-NoResume` | disable HTTP resume of partial downloads (resume is on by default) |
@@ -127,6 +128,23 @@ the official tool, or copy the two files from an existing depot.
 Output layout matches a real offline depot (`PROD/COMP/...`, `PROD/metadata/...`),
 so it can be served directly by `create_vcf9_depot_server_*.sh` or merged into an
 existing depot store.
+
+## Linux-native (bash): `my-vcfdepot.sh`
+
+Same tool without PowerShell — a `curl` + `jq` port for depot servers where you'd
+rather not install pwsh. Identical behaviour and output layout; long-option flags:
+
+```bash
+./my-vcfdepot.sh -t token.txt --type INSTALL --summary
+./my-vcfdepot.sh -t token.txt --component VKR --filename-like '*1.33*' --summary
+./my-vcfdepot.sh -t token.txt --build-depot --latest-only -o /opt/vcf-depot/vcf9
+./my-vcfdepot.sh -t token.txt --component VSP,NSX_T_MANAGER --type INSTALL --latest-only --download -o /depot
+```
+
+Flag map: `--component --type --filename-like --latest-only --summary --download
+--metadata --build-depot --out-dir --no-resume`. Requires `bash curl jq sha256sum awk`
+(`apt-get install -y jq` if missing). Resume via `curl -C -`, sha256-verified,
+idempotent — same as the PowerShell version.
 
 ## Notes / caveats
 
