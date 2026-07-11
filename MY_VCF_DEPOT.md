@@ -1,9 +1,9 @@
 # My-VcfDepot.ps1 — read the FULL catalog directly with the token
 
 `My-VcfDepot.ps1` is a tiny, dependency-free alternative to the official
-`vcf-download-tool` for **listing and downloading** VCF binaries. It talks to the
-Broadcom depot over plain HTTPS using only your download token — no Java, no tool
-install.
+`vcf-download-tool` for **listing, downloading, and building a complete offline
+VCF depot**. It talks to the Broadcom depot over plain HTTPS using only your
+download token — no Java, no tool install, no activation code.
 
 ## Why it exists — the tool caps what you can see
 
@@ -47,7 +47,40 @@ The catalog JSON is shaped:
 
 The script flattens that to one row per binary and either prints it or downloads
 each file to `OutDir/PROD/COMP/<component>/<fileName>`, verifying SHA-256 against
-the catalog. Re-runs skip files whose checksum already matches (`ALREADY_OK`).
+the catalog. Re-runs skip files whose checksum already matches (`ALREADY_OK`),
+and partial files resume instead of restarting.
+
+## Build a complete, ready-to-serve depot
+
+`-BuildDepot` lays down everything a depot needs to serve a **bring-up**, using
+only the token + public endpoints (no activation code):
+
+```powershell
+.\My-VcfDepot.ps1 -TokenFile .\token.txt -BuildDepot -OutDir /depot
+```
+
+That produces a depot store byte-compatible with what the official tool writes:
+
+| Depot file | Source | Auth |
+| --- | --- | --- |
+| `PROD/COMP/<component>/<fileName>` | `dl.broadcom.com/<TOKEN>` | token |
+| `PROD/metadata/productVersionCatalog/v1/*.json` + `.sig` | `dl.broadcom.com/<TOKEN>` | token |
+| `PROD/metadata/manifest/v1/vcfManifest.json` | `dl.broadcom.com/<TOKEN>` | token |
+| `PROD/metadata/vsan/hcl/all.json` | `partnerweb.vmware.com/service/vsan/all.json` | **public** |
+| `PROD/metadata/vsan/hcl/lastupdatedtime.json` | generated from `all.json` | — |
+
+`-BuildDepot` downloads the **management/bring-up component set** (an internal
+whitelist) so you don't accidentally pull all ~2.8 TB. Add extra components
+afterward with `-Component ... -Download` against the same `-OutDir`.
+
+### What it does NOT fetch (on purpose)
+
+`PROD/metadata/Compatibility/v1|v2/VmwareCompatibilityData.json` — the
+interop/upgrade matrix — comes from `vvs.broadcom.com`, which requires a Broadcom
+OAuth handshake (`eapi.broadcom.com/vcf/generateToken`, clientId `vcf-tools`) and
+therefore an **activation code**. It is **day-2 lifecycle/upgrade** data and does
+**not** gate bring-up, so this script skips it. If you need it: run one pass of
+the official tool, or copy the two files from an existing depot.
 
 ## Usage
 
@@ -55,27 +88,55 @@ the catalog. Re-runs skip files whose checksum already matches (`ALREADY_OK`).
 # token goes in a file (never commit it)
 '<TOKEN>' | Set-Content .\token.txt
 
-# list everything the token can see
+# list everything the token can see / per-component size summary
 .\My-VcfDepot.ps1 -TokenFile .\token.txt
-
-# per-component size summary
 .\My-VcfDepot.ps1 -TokenFile .\token.txt -Summary
 
-# inspect a single component (files + checksums + URLs)
-.\My-VcfDepot.ps1 -TokenFile .\token.txt -Component VSP
+# only INSTALL bundles (skip PATCH duplicates)
+.\My-VcfDepot.ps1 -TokenFile .\token.txt -Type INSTALL -Summary
 
-# download a component the official old tool couldn't even list, with sha256 verify
-.\My-VcfDepot.ps1 -TokenFile .\token.txt -Component VCFMS_METRICS_STORE -Download -OutDir .\vcf9-depot
+# one or more components (interactive/-Command passes a real array;
+# note: `pwsh -File` turns a comma list into ONE string — pass a single -Component there)
+.\My-VcfDepot.ps1 -TokenFile .\token.txt -Component VSP,VKR
+
+# narrow within a component by fileName (e.g. one Kubernetes release)
+.\My-VcfDepot.ps1 -TokenFile .\token.txt -Component VKR -FileNameLike '*1.33*' -Summary
+
+# build a full bring-up depot (mgmt set + metadata), no activation code
+.\My-VcfDepot.ps1 -TokenFile .\token.txt -BuildDepot -OutDir /depot
+
+# add just what you want to an existing depot, resume-safe + sha256-verified
+.\My-VcfDepot.ps1 -TokenFile .\token.txt -Component VKR -Type INSTALL -FileNameLike '*1.33*' -Download -OutDir /depot
 ```
 
-Output layout matches a real offline depot (`PROD/COMP/<component>/...`), so it can
-be merged into a depot store served by `create_vcf9_depot_server_*.sh`.
+### Parameters
+
+| Param | Meaning |
+| --- | --- |
+| `-TokenFile` | file containing ONLY the download token (required) |
+| `-Component` | filter to one/more catalog keys; omit for all |
+| `-Type` | filter bundle type (`INSTALL` / `PATCH` / ...); omit for all |
+| `-FileNameLike` | wildcard filter on `fileName` (e.g. `*1.33*`) |
+| `-Summary` | per-component file count + size only |
+| `-Download` | download the filtered binaries (sha256-verified, resume-safe, idempotent) |
+| `-Metadata` | lay down catalog + manifest + vSAN HCL metadata |
+| `-BuildDepot` | one-shot: `-Metadata` + `-Download` of the mgmt/bring-up component set |
+| `-OutDir` | depot-store root (default `.\vcf9-depot`) |
+| `-NoResume` | disable HTTP resume of partial downloads (resume is on by default) |
+
+Output layout matches a real offline depot (`PROD/COMP/...`, `PROD/metadata/...`),
+so it can be served directly by `create_vcf9_depot_server_*.sh` or merged into an
+existing depot store.
 
 ## Notes / caveats
 
-- Requires **PowerShell 7** and outbound HTTPS to `dl.broadcom.com`.
-- Listing shows **all historical versions** in the catalog. There is no
-  latest-only filter yet — filter by `Version` if you only want the newest.
+- Requires **PowerShell 7** and outbound HTTPS to `dl.broadcom.com` (+
+  `partnerweb.vmware.com` for the vSAN HCL). Cross-platform: Windows / Linux / macOS.
+- Verified end-to-end on Windows: list / summary / metadata / download / checksum
+  / idempotent re-run all pass — so a customer can run it locally and download.
+- Listing shows **all historical versions** in the catalog. Filter by `Version`
+  (or `-FileNameLike`) if you only want the newest.
+- Full catalog is ~2.8 TB; `INSTALL`-only is ~1.35 TB. Filter before `-Download`.
 - This reads the catalog directly; it does **not** replace `binaries upload`
   into an SDDC Manager (see `VCF_DOWNLOAD_TOOL.md` §5b for that).
 - Do **not** hand-edit `productVersionCatalog.json` on a depot — it is
