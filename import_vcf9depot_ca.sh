@@ -198,8 +198,15 @@ install_ca_system() {
       if command -v c_rehash >/dev/null 2>&1; then
         c_rehash "${pem_dir}" >/dev/null
         ok "System trust store updated (c_rehash)"
+      elif command -v rehash_ca_certificates.sh >/dev/null 2>&1; then
+        # VCF Installer / SDDC Manager Photon images ship rehash_ca_certificates.sh
+        # instead of c_rehash. Without this, the system (OpenSSL) trust store is NOT
+        # updated and lcm.service reports a misleading "invalid username or password"
+        # when connecting to an HTTPS offline depot with a self-signed cert.
+        rehash_ca_certificates.sh >/dev/null 2>&1
+        ok "System trust store updated (rehash_ca_certificates.sh)"
       else
-        warn "c_rehash not found on Photon OS; cert copied to ${pem_dir}/${ALIAS_NAME}.pem"
+        warn "Neither c_rehash nor rehash_ca_certificates.sh found on Photon OS; cert only copied to ${pem_dir}/${ALIAS_NAME}.pem"
       fi
       # Photon OS 4.0+ also supports update-ca-trust
       if command -v update-ca-trust >/dev/null 2>&1; then
