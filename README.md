@@ -3,6 +3,13 @@
 Scripts for standing up an **offline VCF Software Depot** for VMware Cloud Foundation 9.x,
 and importing the depot CA certificate into VCF Installer, SDDC Manager, and VCF OPS appliances.
 
+> **New — token-only depot builder.** [`My-VcfDepot.ps1`](My-VcfDepot.ps1)
+> ([docs](MY_VCF_DEPOT.md)) builds a complete, ready-to-serve depot with **just
+> your download token** — no activation code, no Java download tool, no
+> tool-version cap (it reads the full ~49-component catalog directly). Run it on
+> the depot server itself; follow **[DEPOT_RUNDOWN.md](DEPOT_RUNDOWN.md)** for the
+> step-by-step Linux flow.
+
 ---
 
 ## Quick start — VCF 9.1 (recommended)
@@ -281,6 +288,15 @@ sudo bash import_vcf9depot_ca.sh --url-insecure https://<NEW_FQDN> --vcf-ops
 Also update the Depot URL in **VCF Installer → Administration → Depot Settings**.
 
 ---
+
+## Docs in this repo
+
+- **[DEPOT_RUNDOWN.md](DEPOT_RUNDOWN.md)** — customer step-by-step: build a full offline depot on Linux with the token only
+- [MY_VCF_DEPOT.md](MY_VCF_DEPOT.md) — `My-VcfDepot.ps1` (token-only catalog reader / depot builder)
+- [VCF_DOWNLOAD_TOOL.md](VCF_DOWNLOAD_TOOL.md) — official `vcf-download-tool` usage
+- [END_TO_END.md](END_TO_END.md) — download → depot → installer with the official tool
+- [COPY_TO_DEPOT.md](COPY_TO_DEPOT.md) — copy binaries into the depot + fix perms/SELinux
+- [INSTALLER_CONNECT_TROUBLESHOOTING.md](INSTALLER_CONNECT_TROUBLESHOOTING.md) — installer → depot connection gotchas
 
 ## References
 
