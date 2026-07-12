@@ -28,8 +28,13 @@ set -euo pipefail
 TOKEN_FILE=""; COMPONENT=""; TYPE=""; FNLIKE=""; OUTDIR="./vcf9-depot"
 LATEST=0; SUMMARY=0; DOWNLOAD=0; METADATA=0; BUILD=0; NORESUME=0
 
-# management/bring-up component set for --build-depot (avoids pulling all ~2.8 TB)
-MGMT_SET="DEPOT_SERVICE,ESX_HOST,NSX_ALB,NSX_T_MANAGER,SDDC_MANAGER_VCF,TELEMETRY_ACCEPTOR,VCENTER,VCFDT,VCF_FLEET_LCM,VCF_LICENSE_SERVER,VCFMS_METRICS_STORE,VCF_OBSERVABILITY_DATA_PLATFORM,VCF_OPS_CLOUD_PROXY,VCF_SALT,VCF_SALT_RAAS,VCF_SDDC_LCM,VIDB,VSP,VSAN_FILE_SERVICES"
+# Convenience component set for --build-depot (avoids pulling all ~2.8 TB).
+# NOTE: this is a hand-curated helper list, NOT the authoritative VCF-Installer set.
+# The AUTHORITATIVE offline-install set is whatever the official tool downloads with
+#   vcf-download-tool binaries download --automated-install -t INSTALL --vcf-version 9.1.0.0
+# (16 components incl. VRA/VROPS/VCF_SERVICE_VCD_MIGRATION_BACKEND). Validate any depot
+# built from MGMT_SET against a real VCF Installer before shipping it to a customer.
+MGMT_SET="DEPOT_SERVICE,ESX_HOST,NSX_ALB,NSX_T_MANAGER,SDDC_MANAGER_VCF,TELEMETRY_ACCEPTOR,VCENTER,VCFDT,VCF_FLEET_LCM,VCF_LICENSE_SERVER,VCFMS_METRICS_STORE,VCF_OBSERVABILITY_DATA_PLATFORM,VCF_OPS_CLOUD_PROXY,VCF_SALT,VCF_SALT_RAAS,VCF_SDDC_LCM,VIDB,VSP,VSAN_FILE_SERVICES,VRA,VROPS,VCF_SERVICE_VCD_MIGRATION_BACKEND"
 
 usage(){ grep '^#' "$0" | sed 's/^# \{0,1\}//' | sed -n '2,30p'; exit "${1:-0}"; }
 
@@ -62,15 +67,20 @@ if [ "$BUILD" = 1 ]; then METADATA=1; DOWNLOAD=1; [ -n "$COMPONENT" ] || COMPONE
 echo "Fetching product version catalog..." >&2
 CAT="$(curl -fsS --max-time 60 "$BASE/metadata/productVersionCatalog/v1/productVersionCatalog.json")"
 
-# flatten catalog -> TSV: comp \t version \t build \t type \t fileName \t sizeBytes \t checksum
-# build = last run of digits in productVersion (monotonic build number), for --latest-only.
+# flatten catalog -> TSV: comp \t version \t vkey \t type \t fileName \t sizeBytes \t checksum
+# vkey = SEMANTIC sort key for --latest-only: every numeric segment of productVersion
+#   (e.g. 9.1.0.0.25368698) offset by 1e12 -> fixed 13-char width, padded to 6 segments,
+#   dot-joined. String compare of vkeys == element-wise numeric version compare, so
+#   9.1.0.0 > 9.0.2.0200 (NOT the old "last build number wins", which wrongly picked the
+#   9.0.2 patch build 25456362 over 9.1 GA build 25368698).
 ROWS="$(jq -r '
   def arr: if type=="array" then . elif .==null then [] else [.] end;
   (if type=="array" then .[0] else . end) as $root
   | ($root.patches | if type=="array" then .[0] else . end)   # .patches is an object keyed by component
   | to_entries[] | .key as $c | (.value|arr)[]
   | .productVersion as $v
-  | (([$v|scan("[0-9]+")]|last) // "0") as $b
+  | ((([$v|scan("[0-9]+")|tonumber]) + [0,0,0,0,0,0])[0:6]
+        | map(. + 1000000000000 | tostring) | join(".")) as $b
   | (.artifacts.bundles|arr)[] | .type as $t | (.binaries|arr)[]
   | [$c,$v,$b,$t,.fileName,(.size|tostring),.checksum] | @tsv
 ' <<<"$CAT")"
@@ -86,9 +96,10 @@ fi
 if [ -n "$FNLIKE" ]; then
   ROWS="$(while IFS=$'\t' read -r c v b t fn sz ck; do case "$fn" in ($FNLIKE) printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$c" "$v" "$b" "$t" "$fn" "$sz" "$ck";; esac; done <<<"$ROWS")"
 fi
-# latest-only: per component keep only rows whose build == max(build) for that component
+# latest-only: per component keep only rows whose vkey == max(vkey) for that component.
+# vkey is a fixed-width dotted string, so a plain string compare is the semantic version compare.
 if [ "$LATEST" = 1 ] && [ -n "$ROWS" ]; then
-  ROWS="$(awk -F'\t' 'NR==FNR{if($3+0>m[$1])m[$1]=$3+0; next} $3+0==m[$1]' <(printf '%s\n' "$ROWS") <(printf '%s\n' "$ROWS"))"
+  ROWS="$(awk -F'\t' 'NR==FNR{if($3>m[$1])m[$1]=$3; next} $3==m[$1]' <(printf '%s\n' "$ROWS") <(printf '%s\n' "$ROWS"))"
 fi
 
 human_gb(){ awk -v b="$1" 'BEGIN{printf "%.2f", b/1073741824}'; }
