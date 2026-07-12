@@ -9,7 +9,7 @@
 
 | 檔案 | 說明 |
 |------|------|
-| `vcf9-depot-complete.tar.gz` | 完整 9.1 離線 depot（含各元件**最新版** install bundle）。頂層目錄為 `PROD/`。sha256 見隨附交付清單。 |
+| `vcf9-depot-complete.tar.gz` | 完整 9.1 離線 depot（含各元件**最新版** install bundle）。頂層目錄為 `PROD/`。大小 `193831632275` bytes（180.5 GiB）；**sha256 `007eee1ef0ae2399c38e4116f87e51017c5550a55ad9d456e8cd96d9529fb714`**。 |
 | `create_vcf9_depot_server_v5.sh` | 一鍵建立 HTTPS + basic-auth depot server（nginx / Apache 皆支援） |
 | `import_vcf9depot_ca.sh` | 把 depot 自簽憑證匯入 VCF Installer 系統 + Java 信任庫 |
 
