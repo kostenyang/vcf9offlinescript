@@ -1,9 +1,15 @@
 # Copy the VCF 9.1 depot tarball into a `create_vcf9_depot_server_v5.sh` server
 
 How to populate an already-built v5 depot server from the delivered
-`vcf9-depot-latest.tar.gz`. The v5 server serves `/opt/vcf-depot/vcf9/PROD/`,
+`vcf9-depot-full.tar.gz`. The v5 server serves `/opt/vcf-depot/vcf9/PROD/`,
 and the tarball's top entry is `PROD/`, so you extract it straight into the
 depot root.
+
+> Size note: the complete offline-install depot is **~139 GiB** (the tarball is
+> ~148.6 GB / `148675924334` bytes). It barely shrinks under gzip because the
+> payload is already-compressed appliance images (OVAs/ISOs/tgz/tar) — that size
+> is expected, not a packaging mistake. Make sure the depot server's datastore
+> has room for the tarball **plus** the extracted tree (~280 GiB transient).
 
 > Prereq: the depot server already exists (built with
 > `create_vcf9_depot_server_v5.sh`). Run that **without** `--download-binaries` —
@@ -12,14 +18,18 @@ depot root.
 ## 1. Copy the tarball to the depot server
 
 ```bash
-scp vcf9-depot-latest.tar.gz root@<DEPOT_IP>:/root/
+scp vcf9-depot-full.tar.gz root@<DEPOT_IP>:/root/
+
+# verify the transfer before extracting (expected sha256):
+sha256sum vcf9-depot-full.tar.gz
+# 58b851c1fcfa9f5bfa3a5109fad0406b650b0debefc4b9738bda8420eb97aacd
 ```
 
 ## 2. Extract it into the depot root
 
 ```bash
 sudo mkdir -p /opt/vcf-depot/vcf9
-sudo tar -xzf /root/vcf9-depot-latest.tar.gz -C /opt/vcf-depot/vcf9/
+sudo tar -xzf /root/vcf9-depot-full.tar.gz -C /opt/vcf-depot/vcf9/
 # -> /opt/vcf-depot/vcf9/PROD/COMP/...  and  /opt/vcf-depot/vcf9/PROD/metadata/...
 ```
 
