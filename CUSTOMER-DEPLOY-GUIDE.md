@@ -152,6 +152,10 @@ bash _localdepot_on_installer.sh <INSTALLER_IP> /nfs/vmware/vcf/nfs-mount/locald
 | 某元件選「最新 patch 版」Download 失敗 | 該版本 binary 不在 depot | depot 內若無該版就選 depot 有的版本；本交付包已含各元件最新 install 版 |
 | Cloud proxy / License server 只有 `9.1.0.0` 可選 | 這兩者若無 patch 版即以 base 為最新 | 屬正常，非缺料 |
 | Installer root SSH 連不上 | root SSH 預設關閉 | 用 `vcf` / 安裝時的 local 密碼登入，再 `su -`（root 密碼＝OVF 部署時的 ROOT_PASSWORD） |
+| **(模式B)** 本地 depot 連線報 `certificate_unknown` / `Unable to construct a valid chain` | 憑證沒進 **lcm 用的 JRE cacerts**（只做系統 rehash 不夠） | keytool 匯入 `/usr/lib/jvm/openjdk-java21-headless.x86_64/lib/security/cacerts`（storepass `changeit`）再 `systemctl restart lcm.service`；`_localdepot_on_installer.sh` 已內建 |
+| **(模式B)** nginx 回 HTTP 500 `crypt_r() failed` | Photon 的 `openssl passwd -apr1` 產出**空 hash** | htpasswd 改用 `python3 crypt` SHA-512；腳本已改 |
+| **(模式B)** `_localdepot_on_installer.sh` 報 `set: pipefail: invalid option` | 從 Windows 取檔帶了 CRLF | `sed -i 's/\r$//' _localdepot_on_installer.sh`（repo `.gitattributes` 已強制 `*.sh` LF） |
+| **(模式B)** depot URL 帶 `:8443` 會不會被拒？ | — | **不會**，實測 installer 接受非標準埠 `https://<ip>:8443` |
 
 ---
 

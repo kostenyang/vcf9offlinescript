@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+# Shell scripts must stay LF even on Windows checkouts — CRLF breaks `set -o pipefail`
+# and here-docs when run on the Linux depot server / Photon installer appliance.
+*.sh text eol=lf
