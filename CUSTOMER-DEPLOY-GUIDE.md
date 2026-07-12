@@ -100,9 +100,23 @@ do{Start-Sleep 15;$st=(Invoke-RestMethod "$inst/v1/system/settings/depot" -Heade
 
 ### A-5. 下載 bundle
 
-**UI**：進 bundle 下載頁 → 勾選元件（版本下拉可選最新）→ **Download** → 等 Download Status = Success。
+> **這是「讓 UI 從 Not downloaded 變 Downloaded」的關鍵步驟** —— depot 接好 + SYNCED
+> 之後，bundle 預設是 **Not downloaded**，一定要在這頁**勾選 + 按 DOWNLOAD** 才會下載。
 
-**API**（下載全部可下載的 bundle 並等到成功）：
+**UI step-by-step**（VCF Installer 網頁）：
+1. 左側選單 → **Bundle Management / Download**（頂端會看到 `DOWNLOAD`、`DELETE` 兩個動作）。
+2. 每列一個元件，**Version 欄有下拉** —— 選你要的版本（本交付包各元件最新版都在，選最新即可；
+   若選到 depot 沒有的版本會 Failed）。
+3. 勾選要的元件（左上角 checkbox 可**全選**）。
+4. 按最上方 **DOWNLOAD**。
+5. **Download Status** 欄會從 `Not downloaded` → `Scheduled` → `In progress %` → **`Downloaded`（綠色 Success）**。
+   全部變 Downloaded 才算完成。
+6. （驗證）下載的實體檔會落在 Installer 的 `/nfs/vmware/vcf/nfs-mount/bundle/<id>/`。
+
+> ⚠️ 版本雷：UI 版本下拉常**預設成最新 patch**。depot 內若無該版 binary 就會 Failed（狀態不會變
+> Downloaded）。本交付包已含各元件最新 **INSTALL** 版；若仍 Failed，把下拉改成 depot 內確有的版本。
+
+**API**（自動化：下載全部可下載的 bundle 並等到成功，等同 UI 全選按 Download）：
 
 ```powershell
 $dl=@{bundleDownloadSpec=@{downloadNow=$true}}|ConvertTo-Json
