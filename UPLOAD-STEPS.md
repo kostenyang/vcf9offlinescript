@@ -16,6 +16,15 @@
 - depot 帳密預設：`vcfdepot / VMware1!VMware1!`
 - ⚠️ 腳本從 Windows 拿到後若跑不動，先轉 LF：`sed -i 's/\r$//' *.sh`
 
+> **若交付物是 3 份 7-Zip 分割檔**（`vcf9-depot-complete.7z.001/.002/.003`）：3 份放同一資料夾，
+> 先在 **.001** 上跑 7z 合併還原（會自動抓 .002/.003），再接下面步驟：
+> ```bash
+> 7z x vcf9-depot-complete.7z.001        # -> 還原 vcf9-depot-complete.tar.gz
+> sha256sum vcf9-depot-complete.tar.gz   # 應為 007eee1ef0ae2399c38e4116f87e51017c5550a55ad9d456e8cd96d9529fb714
+> ```
+> 這個 tar **自帶官方 metadata + Compatibility + 全部元件 binary**（126 檔 / 22 元件），是完整可
+> sync 的 depot，**不需另配 metadata**。（若只有 binary、缺官方 metadata，見 `METADATA-ZIP-DEPOT.md`。）
+
 ---
 
 # 第一段：DEPOT 端（把包上傳並開始服務）
