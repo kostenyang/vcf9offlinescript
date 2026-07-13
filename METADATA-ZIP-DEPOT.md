@@ -121,6 +121,12 @@ do{Start-Sleep 10;$s=(Invoke-RestMethod "$inst/v1/system/settings/depot/depot-sy
 | metadata sync（Compatibility 來自 zip） | **SYNCED** |
 | Telemetry (98MB) 下載 | **SUCCESSFUL** |
 | VIDB (1.04GB 真元件) 下載 | **SUCCESSFUL** |
+| VCF_SALT (348MB) 下載 | **SUCCESSFUL** |
+
+> 上表流程已**照本文件字面各步驟實地驗證一次**（含 step 3「在 depot server 上直接用
+> `my-vcfdepot` 下 binary 進 depot」）：`my-vcfdepot --component VCF_SALT
+> --filename-like '*9.1.0.0.25346036*' --download -o /opt/vcf-depot/vcf9` → 4 檔 sha256 全對 →
+> 收 v5 權限 → 全新 installer sync SYNCED → 下載 SUCCESSFUL。
 
 ## 踩雷
 
