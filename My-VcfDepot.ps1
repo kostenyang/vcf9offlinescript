@@ -72,9 +72,15 @@ $patch = $root.patches[0]
 $rows = foreach ($comp in $patch.PSObject.Properties.Name) {
   if ($Component -and $comp -notin $Component) { continue }
   $vers = $patch.$comp
-  if ($LatestOnly) {   # newest = largest build number (last run of digits in productVersion, e.g. ...0300.25536194)
+  if ($LatestOnly) {   # newest = highest SEMANTIC version (compare every numeric segment, not just the
+                       # trailing build number). Old code used the last run of digits (build #), which wrongly
+                       # picked 9.0.2.0200.25456362 (build 25456362) over 9.1.0.0.25368698 (build 25368698).
+                       # Key: each numeric segment offset to fixed 13-char width, padded to 6 segments, dot-joined;
+                       # string sort of the key == element-wise numeric version compare.
     $vers = @($vers | Sort-Object {
-      $m=[regex]::Matches($_.productVersion,'\d+'); if($m.Count){[long]$m[$m.Count-1].Value}else{0}
+      $n = @($_.productVersion -split '\D+' | Where-Object { $_ -ne '' } | ForEach-Object { [long]$_ })
+      while ($n.Count -lt 6) { $n += 0 }
+      ($n[0..5] | ForEach-Object { '{0:D13}' -f $_ }) -join '.'
     } | Select-Object -Last 1)
   }
   foreach ($ver in $vers) {
@@ -179,5 +185,7 @@ if ($Download) {
 Write-Host "`nDone. Depot root: $OutDir" -ForegroundColor Green
 if ($Metadata) {
   Write-Host "Note: Compatibility/ (interop matrix, vvs.broadcom.com) was NOT fetched - needs activation code." -ForegroundColor DarkYellow
-  Write-Host "      It is day-2 only and does not gate bring-up. Copy from an existing depot if needed." -ForegroundColor DarkYellow
+  Write-Host "      ** VCF Installer offline-depot sync REQUIRES COMP/SDDC_MANAGER_VCF/Compatibility/VmwareCompatibilityData.json;" -ForegroundColor DarkYellow
+  Write-Host "         without it sync fails with 'Vmware compatibility data download failed'. Copy it from an existing depot" -ForegroundColor DarkYellow
+  Write-Host "         or run one pass of the official vcf-download-tool to obtain it. **" -ForegroundColor DarkYellow
 }
