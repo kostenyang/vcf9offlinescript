@@ -3,12 +3,12 @@
 Scripts for standing up an **offline VCF Software Depot** for VMware Cloud Foundation 9.x,
 and importing the depot CA certificate into VCF Installer, SDDC Manager, and VCF OPS appliances.
 
-> **New — token-only depot builder.** [`My-VcfDepot.ps1`](My-VcfDepot.ps1)
-> ([docs](MY_VCF_DEPOT.md)) builds a complete, ready-to-serve depot with **just
-> your download token** — no activation code, no Java download tool, no
-> tool-version cap (it reads the full ~49-component catalog directly). Run it on
-> the depot server itself; follow **[DEPOT_RUNDOWN.md](DEPOT_RUNDOWN.md)** for the
-> step-by-step Linux flow.
+> **Ways to build/deliver the depot** (pick per scenario):
+> - **[DOWNLOAD-INTO-DEPOT.md](DOWNLOAD-INTO-DEPOT.md)** — official VCF Download Tool: activation code → `binaries download` straight into a `PROD/` depot.
+> - **[CUSTOMER-DEPLOY-GUIDE.md](CUSTOMER-DEPLOY-GUIDE.md)** / **[UPLOAD-STEPS.md](UPLOAD-STEPS.md)** — ship a complete depot tar, stand it up (external server or on the installer).
+> - **[OA-FLAT-SORT-DEPOT.md](OA-FLAT-SORT-DEPOT.md)** — customer dumps all downloads flat → `sort-flat-depot.sh` auto-arranges into `PROD/COMP/`.
+> - **[METADATA-ZIP-DEPOT.md](METADATA-ZIP-DEPOT.md)** — official metadata zip + token-downloaded binaries (lightweight).
+> - **[MY_VCF_DEPOT.md](MY_VCF_DEPOT.md)** — `My-VcfDepot.ps1` token-only catalog reader / depot builder.
 
 ---
 
@@ -49,12 +49,11 @@ sudo bash import_vcf9depot_ca.sh \
 
 | Script | Web server | VCF | Protocol | Auth | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `create_vcf9_depot_server.sh` | nginx | 9.0.x | HTTPS | Basic | Original |
-| `create_vcf9_depot_server_v2.sh` | nginx | 9.0.x | HTTPS + HTTP | Basic | HTTP redirect |
-| `create_vcf9_depot_server_v3.sh` | nginx | 9.1 | HTTP | **None** | VCF 9.1 no-auth via API |
-| `create_vcf9_depot_server_v4_nginx.sh` | nginx | 9.1 | HTTPS + HTTP | Basic | 9.1 + Ubuntu fixes |
-| `create_vcf9_depot_server_v4_apache.sh` | Apache2 | 9.1 | HTTPS | Basic | vstellar.com Part 4 |
-| **`create_vcf9_depot_server_v5.sh`** | **nginx or apache** | **9.1** | **HTTPS** | **Basic** | **⭐ Recommended — unified** |
+| **`create_vcf9_depot_server_v5.sh`** | **nginx or apache** | **9.1** | **HTTPS** | **Basic** | **⭐ Recommended — unified (Ubuntu)** |
+| `create_vcf9_depot_server_rhel.sh` | nginx | 9.1 | HTTPS | Basic | RHEL/Rocky/Alma variant — see [OFFLINE-OS-REPO.md](OFFLINE-OS-REPO.md) |
+
+> v1–v4 (`create_vcf9_depot_server{.sh,_v2,_v3,_v4_nginx,_v4_apache}`) were consolidated into **v5** and removed.
+> For the VCF 9.1 **HTTP no-auth** endpoint (`:8888`), see the nginx snippet in [OFFLINE-OS-REPO.md](OFFLINE-OS-REPO.md).
 
 ### CA import script
 
@@ -203,25 +202,11 @@ sudo bash import_vcf9depot_ca.sh \
 
 ---
 
-## VCF 9.1 — HTTP no-auth depot (v3)
+## VCF 9.1 — HTTP no-auth depot (`:8888`)
 
-VCF 9.1 added native support for an offline depot served over plain HTTP with no auth.
-
-| Protocol | Auth | 9.0.x | 9.1 | Notes |
-| --- | --- | --- | --- | --- |
-| HTTPS | Basic | ✅ | ✅ | Default — use v5 |
-| HTTP | Basic | ✅ | ✅ | Legacy workaround |
-| HTTP | **None** | ❌ | ✅ | **v3 — VCF Installer API only** |
-
-> The VCF 9.1 Installer **UI** does not support HTTP depots. Use the **API**.
-
-```bash
-sudo bash create_vcf9_depot_server_v3.sh \
-  --fqdn depot.home.lab --ip 10.0.0.60 \
-  --vcf-installer-fqdn sddcm01.vcf.lab \
-  --vcf-installer-password 'VMware1!VMware1!' \
-  --configure-installer
-```
+VCF 9.1 supports an offline depot over plain HTTP with **no auth** (API-only; the Installer **UI**
+does not support HTTP depots). Add a `:8888` nginx server block on the depot and point the installer
+via API at `http://<IP>:8888` — snippet + steps in **[OFFLINE-OS-REPO.md](OFFLINE-OS-REPO.md)**.
 
 ---
 
@@ -291,11 +276,18 @@ Also update the Depot URL in **VCF Installer → Administration → Depot Settin
 
 ## Docs in this repo
 
-- **[DEPOT_RUNDOWN.md](DEPOT_RUNDOWN.md)** — customer step-by-step: build a full offline depot on Linux with the token only
+**Build / deliver a depot**
+- [DOWNLOAD-INTO-DEPOT.md](DOWNLOAD-INTO-DEPOT.md) — official `vcf-download-tool`: activation code → `binaries download` into a `PROD/` depot
+- [CUSTOMER-DEPLOY-GUIDE.md](CUSTOMER-DEPLOY-GUIDE.md) — ship a complete depot tar, two deploy models (external server / on the installer)
+- [UPLOAD-STEPS.md](UPLOAD-STEPS.md) — depot-side + installer-side upload steps (incl. 7z split reassembly)
+- [OA-FLAT-SORT-DEPOT.md](OA-FLAT-SORT-DEPOT.md) — customer dumps downloads flat → `sort-flat-depot.sh` arranges into `PROD/COMP/`
+- [METADATA-ZIP-DEPOT.md](METADATA-ZIP-DEPOT.md) — official metadata zip + token-downloaded binaries
 - [MY_VCF_DEPOT.md](MY_VCF_DEPOT.md) — `My-VcfDepot.ps1` (token-only catalog reader / depot builder)
-- [VCF_DOWNLOAD_TOOL.md](VCF_DOWNLOAD_TOOL.md) — official `vcf-download-tool` usage
-- [END_TO_END.md](END_TO_END.md) — download → depot → installer with the official tool
-- [COPY_TO_DEPOT.md](COPY_TO_DEPOT.md) — copy binaries into the depot + fix perms/SELinux
+
+**RHEL / air-gapped OS**
+- [OFFLINE-OS-REPO.md](OFFLINE-OS-REPO.md) — offline DNF/apt package repos + RHEL VCF depot + `:8888` no-auth endpoint
+
+**Troubleshooting**
 - [INSTALLER_CONNECT_TROUBLESHOOTING.md](INSTALLER_CONNECT_TROUBLESHOOTING.md) — installer → depot connection gotchas
 
 ## References

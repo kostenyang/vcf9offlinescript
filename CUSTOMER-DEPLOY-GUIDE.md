@@ -9,12 +9,24 @@
 
 | 檔案 | 說明 |
 |------|------|
-| `vcf9-depot-complete.tar.gz` | 完整 9.1 離線 depot（含各元件**最新版** install bundle）。頂層目錄為 `PROD/`。大小 `193831632275` bytes（180.5 GiB）；**sha256 `007eee1ef0ae2399c38e4116f87e51017c5550a55ad9d456e8cd96d9529fb714`**。 |
+| `vcf9-depot-complete.7z.001` … `.021` | 完整 9.1 離線 depot 的 **7-Zip 分割檔（21 份，每份 ≤10GB）**。合回後 = `vcf9-depot-complete.tar.gz`，頂層 `PROD/` |
+| `vcf9-depot-complete.7z.SHA256SUMS` | 21 份逐份 sha256，**收到先驗這個** |
 | `create_vcf9_depot_server_v5.sh` | 一鍵建立 HTTPS + basic-auth depot server（nginx / Apache 皆支援） |
 | `import_vcf9depot_ca.sh` | 把 depot 自簽憑證匯入 VCF Installer 系統 + Java 信任庫 |
+| `_localdepot_on_installer.sh` | 把 depot 直接架在 Installer 上（模式 B 用） |
 
-**帳密（可自訂）**：depot basic-auth 預設 `vcfdepot / VMware1!VMware1!`
-（用 v5 的 `--user/--password` 可改）。
+**帳密（可自訂）**：depot basic-auth 預設 `vcfdepot / VMware1!VMware1!`（用 v5 的 `--user/--password` 可改）。
+
+### 第 0 步：先合回單一 tar（模式 A / B 都要，在**有 7-Zip 的機器**做一次）
+
+> installer(Photon) 沒有 7z，**不要在 installer 上合回**；挑一台有 7-Zip 的機器（工作站，或 Linux depot server 裝 `p7zip`）合回，再把 tar 送上去。
+
+```bash
+sha256sum -c vcf9-depot-complete.7z.SHA256SUMS   # 21 份全 OK 才往下
+7z x vcf9-depot-complete.7z.001                  # 7z 自動抓 .002….021 -> vcf9-depot-complete.tar.gz
+sha256sum vcf9-depot-complete.tar.gz             # 應 = 007eee1ef0ae2399c38e4116f87e51017c5550a55ad9d456e8cd96d9529fb714
+```
+合回的 tar：`193831632275` bytes（180.5 GiB），**自帶官方 metadata + Compatibility + 全部元件 binary（22 元件），完整可 sync，不需另配 metadata**。
 
 **depot 內容**：涵蓋 automated-install 全套 + 各元件 9.1 最新 install 版本
 （vCenter / NSX / SDDC Manager / VCF Automation / VCF Operations / Cloud Proxy /
@@ -36,13 +48,13 @@ sudo bash create_vcf9_depot_server_v5.sh \
 產出：depot 根目錄 `/opt/vcf-depot/vcf9`（對外服務 `https://<DEPOT_IP>/PROD/`）、
 自簽憑證 `/etc/nginx/vcf9-certs/vcf9-depot.crt`（含 IP-SAN）。
 
-### A-2. 灌入交付包
+### A-2. 灌入交付包（第 0 步合回後的 tar）
 
 ```bash
 scp vcf9-depot-complete.tar.gz root@<DEPOT_IP>:/root/
 ssh root@<DEPOT_IP>
 
-# 驗證傳輸完整（對照交付清單的 sha256）
+# 驗證傳輸完整（對照第 0 步 sha256）
 sha256sum /root/vcf9-depot-complete.tar.gz
 
 # 解壓到 depot 根目錄（tar 頂層就是 PROD/）
@@ -64,10 +76,11 @@ curl -sk -u 'vcfdepot:VMware1!VMware1!' \
 
 ### A-3. VCF Installer 匯入 depot 憑證（**必做，否則帳密會誤報錯**）
 
-在 **VCF Installer** 上，用 `vcf` 帳號登入 SSH（root SSH 預設關）後 `su -` 取得 root：
+在 **VCF Installer** 上，用 `vcf` 帳號登入 SSH（root SSH 預設關）後 `su -` 取得 root
+（`vcf` **不能 sudo**，一定要 `su -`）：
 
 ```bash
-sudo bash import_vcf9depot_ca.sh --url-insecure https://<DEPOT_IP>:443
+bash import_vcf9depot_ca.sh --url-insecure https://<DEPOT_IP>:443
 systemctl restart lcm.service        # 是 lcm.service，不是 vcf-installer
 ```
 
@@ -135,24 +148,35 @@ Invoke-RestMethod "$inst/v1/bundles" -Headers $h -SkipCertificateCheck).elements
 
 ## 模式 B：Depot 直接放在 Installer 上（本地，免額外主機）
 
-適用單台 Installer、不想另建 depot server。把交付包解在 Installer 內，用 Installer
-內建的 nginx 在 `:8443` 開本地 depot，Installer 指向自己。
+適用單台 Installer、不想另建 depot server。把（第 0 步合回好的）tar 解在 Installer 內，
+用 standalone nginx 在 `:8443` 開本地 depot，Installer 指向自己。
 
-在 **VCF Installer**（`su -` 取得 root）：
+Installer 的 **root SSH 預設關、`vcf` 不能 sudo** → `vcf` 傳檔、`su -` 操作
+（root 密碼 = OVF 部署時的 ROOT_PASSWORD）。**tar 已在第 0 步於別台合回**（installer 上沒 7z）。
 
 ```bash
-# 1. 傳包 + 解壓到大容量掛載（/nfs/... 有數百 GB）
-scp vcf9-depot-complete.tar.gz root@<INSTALLER_IP>:/nfs/vmware/vcf/nfs-mount/
-mkdir -p /nfs/vmware/vcf/nfs-mount/localdepot/vcf9
-tar -xzf /nfs/vmware/vcf/nfs-mount/vcf9-depot-complete.tar.gz \
-    -C /nfs/vmware/vcf/nfs-mount/localdepot/vcf9/
+# 1. 先建目錄，並把 staging 改成 vcf 可寫（vcf 登入 → su -）
+su -
+mkdir -p /nfs/vmware/vcf/nfs-mount/localdepot/vcf9 /nfs/vmware/vcf/nfs-mount/stage
+chown vcf:vcf /nfs/vmware/vcf/nfs-mount/stage
+exit                       # 回到 vcf
 
-# 2. 開本地 depot（nginx :8443 + 憑證 + 匯信任庫 + 重啟 lcm）
+# 2. 從你的機器把合回好的 tar 傳到 stage（用 vcf 帳號；~180GiB）
+scp vcf9-depot-complete.tar.gz vcf@<INSTALLER_IP>:/nfs/vmware/vcf/nfs-mount/stage/
+
+# 3. 回 installer，su - 後解到 localdepot，刪 stage tar 騰空間
+su -
+tar -xzf /nfs/vmware/vcf/nfs-mount/stage/vcf9-depot-complete.tar.gz \
+    -C /nfs/vmware/vcf/nfs-mount/localdepot/vcf9/          # 頂層就是 PROD/
+rm -f /nfs/vmware/vcf/nfs-mount/stage/vcf9-depot-complete.tar.gz
+
+# 4. 開本地 depot（standalone nginx :8443 + 憑證進 JRE cacerts + 重啟 lcm）
 bash _localdepot_on_installer.sh <INSTALLER_IP> /nfs/vmware/vcf/nfs-mount/localdepot/vcf9
 ```
 
 之後 depot URL 用 `https://<INSTALLER_IP>:8443`、帳密 `vcfdepot / VMware1!VMware1!`，
-其餘 sync / 下載步驟同 **A-4 / A-5**（URL 換成 `:8443`）。
+其餘 sync / 下載步驟同 **A-4 / A-5**（URL 換成 `:8443`；憑證已在腳本內匯好，A-3 可略）。
+`/nfs` 掛載要夠：tar 180GiB + 解出 ~191GiB，建議 ≥400GiB（實測 installer `/nfs/.../nfs-mount` 503GiB）。
 
 ---
 
@@ -163,7 +187,10 @@ bash _localdepot_on_installer.sh <INSTALLER_IP> /nfs/vmware/vcf/nfs-mount/locald
 | depot 帳密正確卻報 `Invalid username or password` | 憑證沒匯進 Installer 系統信任庫 | 跑 A-3 的 `import_vcf9depot_ca.sh` + `systemctl restart lcm.service` |
 | depot URL 被判 `INVALID_URL` | 用了 FQDN（`.local`）而 cert 只認 IP-SAN | URL 一律用 **IP**（v5 憑證已含 IP-SAN） |
 | 帳密欄位放錯 | 塞進 `depotConfiguration` 內 | 帳密要放**頂層 `offlineAccount`** |
-| 某元件選「最新 patch 版」Download 失敗 | 該版本 binary 不在 depot | depot 內若無該版就選 depot 有的版本；本交付包已含各元件最新 install 版 |
+| 某元件選「最新 patch 版」Download 失敗 | 該版本 binary 不在 depot | depot 內若無該版就選有 **install OVA** 的版本；本交付包已含各元件最新 install 版 |
+| 下拉「最新」抓到 `9.0.2` 版而失敗（VIDB / VRA…） | catalog 排序陷阱：`9.0.2` 的 build 號可能比 `9.1.0` 大 | 別只看 build number，選 **9.1.0** 那版 |
+| HCX 某版失敗 | 那版只有 upgrade bundle 沒 install OVA | 選有 `*-appliance-9.1.0.0.*.ova` 的版本 |
+| VRSLCM / NSX_ALB(Avi) 不在清單 | 本包未含（9.1 部署非必需） | 需要再另補進 depot |
 | Cloud proxy / License server 只有 `9.1.0.0` 可選 | 這兩者若無 patch 版即以 base 為最新 | 屬正常，非缺料 |
 | Installer root SSH 連不上 | root SSH 預設關閉 | 用 `vcf` / 安裝時的 local 密碼登入，再 `su -`（root 密碼＝OVF 部署時的 ROOT_PASSWORD） |
 | **(模式B)** 本地 depot 連線報 `certificate_unknown` / `Unable to construct a valid chain` | 憑證沒進 **lcm 用的 JRE cacerts**（只做系統 rehash 不夠） | keytool 匯入 `/usr/lib/jvm/openjdk-java21-headless.x86_64/lib/security/cacerts`（storepass `changeit`）再 `systemctl restart lcm.service`；`_localdepot_on_installer.sh` 已內建 |
