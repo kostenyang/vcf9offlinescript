@@ -276,6 +276,9 @@ Also update the Depot URL in **VCF Installer → Administration → Depot Settin
 
 ## Docs in this repo
 
+**VCF Download Tool**
+- [VCF-DOWNLOAD-TOOL.md](VCF-DOWNLOAD-TOOL.md) — the tool itself: install, activation code, commands, flags, gotchas (syntax verified vs `--help`)
+
 **Build / deliver a depot**
 - [DOWNLOAD-INTO-DEPOT.md](DOWNLOAD-INTO-DEPOT.md) — official `vcf-download-tool`: activation code → `binaries download` into a `PROD/` depot
 - [CUSTOMER-DEPLOY-GUIDE.md](CUSTOMER-DEPLOY-GUIDE.md) — ship a complete depot tar, two deploy models (external server / on the installer)
