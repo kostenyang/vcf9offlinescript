@@ -133,5 +133,6 @@ bash make-metadata-zip.sh  <depot.tar.gz | depot根目錄>  vcf-9.1.0.0400-offli
 | **sort 歸位** | `sort-flat-depot.sh -m` + 自製 0400 metadata zip | **48/48 歸位、0 未分類**；serve catalog/compat/vcenter-iso 全 HTTP 200 |
 | installer 接 depot | 全新 `kosten-vcf91-inst-sort` 192.168.114.28 → `https://172.16.10.57` | **DEPOT_CONNECTION_SUCCESSFUL + SYNCED** |
 | **下載** | .28 觸發 0400 下載 | **16 元件全 Download Status=Success**（Cloud proxy/Fleet/Identity broker/License/Migration/Salt/Salt RaaS/SDDC LCM/SDDC Manager/Software depot/Telemetry/VCF Automation/VCF Operations/VSP/NSX 0200/vCenter）|
+| **make-metadata-zip.sh 產物驗證** | depot metadata 層全刪→只用腳本產 zip 重鋪 | 逐檔 sha256 同官方結構 13/13；installer **re-sync=SYNCED**；刪掉的 bundle 由腳本 catalog 重新列出→**fresh download=SUCCESSFUL** |
 
 > 註：catalog「最新 build」有時會挑到 depot 未放的版本（NSX 誤挑 4.2.4、HCX、NSX_ALB、VRSLCM 9.0.2）→ 那幾列 Failed 屬**版本挑選假象非缺陷**；把版本下拉改成 depot 內有的（如 NSX `9.1.0.0200`）再下即 Success。
