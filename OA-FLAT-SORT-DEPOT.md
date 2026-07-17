@@ -109,35 +109,18 @@ UI：`Administration → Depot Settings` → Offline depot → URL `https://<DEP
 
 ---
 
-## 附錄：照 0100 zip 做一個「對應版本」的 metadata zip
+## 附錄：照 0100 zip 做一個「對應版本」的 metadata zip — `make-metadata-zip.sh`
 
-當手上 binary 是 0400、但只有 0100 的 metadata zip 時，用官方 download tool 下出來的 0400
-depot 的 metadata 反做一個 0400 zip（結構與 0100 zip 完全相同的 13 個檔）：
+當手上 binary 是 0400、但只有 0100 的 metadata zip 時，從 **download-tool 下的 depot 目錄**或
+**完整 depot tar(.gz)** 反做一個對應版本的 zip（結構與官方 zip 完全相同的 13 個檔）：
 
-```python
-# python：從 download-tool 下的 depot 抽 metadata 打成 zip
-import zipfile, os
-src = r'<download-tool 下的 depot 根>'   # 內有 PROD/metadata ...
-out = r'vcf-9.1.0.0400-offline-depot-metadata.zip'
-paths = [
- 'PROD/COMP/SDDC_MANAGER_VCF/Compatibility/VmwareCompatibilityData.json',
- 'PROD/COMP/VCENTER/vmw/<uuid>/upgrade_info.sig',
- 'PROD/COMP/VCENTER/vmw/<uuid>/upgrade_info.xml',
- 'PROD/COMP/VCENTER/vmw/<uuid>/upgrade_info.xml.sha256',
- 'PROD/metadata/Compatibility/v1/VmwareCompatibilityData.json',
- 'PROD/metadata/Compatibility/v2/VmwareCompatibilityData.json',
- 'PROD/metadata/manifest/v1/vcfManifest.json',
- 'PROD/metadata/productVersionCatalog/v1/productVersionCatalog.json',
- 'PROD/metadata/productVersionCatalog/v1/productVersionCatalog.sig',
- 'PROD/metadata/vsan/hcl/all.json',
- 'PROD/metadata/vsan/hcl/lastupdatedtime.json',
- 'PROD/vsan/hcl/all.json',
- 'PROD/vsan/hcl/lastupdatedtime.json',
-]
-with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z:
-    for p in paths: z.write(os.path.join(src,p.replace('/',os.sep)), p)
+```bash
+# 來源可以是 depot 根目錄(含 PROD/) 或 depot tar(.gz) — tar 為單趟串流掃描,不落地解壓
+bash make-metadata-zip.sh  <depot.tar.gz | depot根目錄>  vcf-9.1.0.0400-offline-depot-metadata.zip
+# packed 13 files -> ...  (缺 sync 必要檔會 exit 1)
 ```
-產出的 zip 頂層是 `PROD/`，catalog 為 0400，可餵給 `sort-flat-depot.sh` 第三個參數。
+產出頂層 `PROD/`、catalog 為該 depot 的版本，可餵給 `sort-flat-depot.sh` 第三個參數、
+或直接解進 depot 的根目錄。
 
 ---
 
