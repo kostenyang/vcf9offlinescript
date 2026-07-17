@@ -78,6 +78,21 @@ vcf-download-tool binaries download \
 ```
 - **metadata 一起下**：下載過程會自動抓 product version catalog、unified release manifest、vSAN HCL、
   Compatibility data → 產出 `<輸出dir>/PROD/`（`COMP/<元件>` + `metadata/` + `vsan/`）。
+
+### 只下「特定版本」（不是整條線最新）
+```bash
+# 方式1：--id（最精準,一個 ID = 一個確切版本;binaries list 先查 ID）
+vcf-download-tool binaries download --depot-store=<dir> \
+  --depot-download-activation-code-file=actcode.txt --id=<bundleId>
+#  -> 輸出 "1 element" + 精準對到該版(實測 --id 只選那一版,不會下同元件其他版)
+
+# 方式2：--component + --component-version（要搭 --vcf-version=9.1.0.0,同群組必填)
+vcf-download-tool binaries download --depot-store=<dir> \
+  --depot-download-activation-code-file=actcode.txt \
+  --vcf-version=9.1.0.0 --sku=VCF --type=INSTALL \
+  --component=VCF_LICENSE_SERVER --component-version=9.1.0.0200
+```
+> ⚠️ `--component/--component-version` 屬 [VCF VERSION] 群組 → **一定要帶 `--vcf-version`**（否則印 usage、exit 2）。單獨用 `--component-version` 不行。
 - 每檔對**簽章 catalog 驗 sha256**；結尾印 `N SUCCESS / 0 FAILED`。
 - 同 `--depot-store` 重跑是**累加**（跳過已下的）。
 - 首次跑會問 **CEIP**：`--ceip=DISABLE`（或 `echo N|` 餵入）。
@@ -116,6 +131,8 @@ vcf-download-tool binaries download \
 | 5 | `--id` 跟 `--vcf-version` 一起下 | filter **三選一互斥**，不能混用；擇一 |
 | 6 | `configuration generate --software-depot-id` 後 code 失效 | ID 一改舊 code 作廢 → 重新 portal 產 code |
 | 7 | 要 root / admin | **不需要**；工具綠色可攜，一般使用者即可跑 |
+| 8 | `configuration get` 過期報 `Can't access Broadcom depot with provided activation code` | code **有時效**；用**同一個 software depot ID** 到 portal 重新產一顆新 code（ID 不用動）|
+| 9 | list/metadata 可讀，但 binary 下載 **HTTP 403 Forbidden**（`dl.broadcom.com` `/COMP/…`）| 該 code 的**帳號沒有 binary 下載 entitlement**（不同 site/tenant 權限不同）→ 換一顆有下載權限的 code。**注意：這與指令無關**，`--id` 仍會正確命中該版（印 `1 element`）|
 
 ---
 
