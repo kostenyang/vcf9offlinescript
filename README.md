@@ -6,6 +6,7 @@ and importing the depot CA certificate into VCF Installer, SDDC Manager, and VCF
 > **Ways to build/deliver the depot** (pick per scenario):
 > - **[DOWNLOAD-INTO-DEPOT.md](DOWNLOAD-INTO-DEPOT.md)** — official VCF Download Tool: activation code → `binaries download` straight into a `PROD/` depot.
 > - **[CUSTOMER-DEPLOY-GUIDE.md](CUSTOMER-DEPLOY-GUIDE.md)** / **[UPLOAD-STEPS.md](UPLOAD-STEPS.md)** — ship a complete depot tar, stand it up (external server or on the installer).
+> - **[DEPLOY_TARBALL_TO_V5_DEPOT.md](DEPLOY_TARBALL_TO_V5_DEPOT.md)** — simple 5-step: scp a depot tar.gz onto a v5 server and extract it into place.
 > - **[OA-FLAT-SORT-DEPOT.md](OA-FLAT-SORT-DEPOT.md)** — customer dumps all downloads flat → `sort-flat-depot.sh` auto-arranges into `PROD/COMP/`.
 > - **[METADATA-ZIP-DEPOT.md](METADATA-ZIP-DEPOT.md)** — official metadata zip + token-downloaded binaries (lightweight).
 > - **[METADATA-ZIP-0400-RUNBOOK.md](METADATA-ZIP-0400-RUNBOOK.md)** — the self-made 0400 metadata zip + flat-sort flow, pinned to the real 9.1.0.0400 files.
