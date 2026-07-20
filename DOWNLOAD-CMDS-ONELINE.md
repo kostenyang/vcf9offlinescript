@@ -2,6 +2,18 @@
 
 把佔位符換成你的：`<tool>` = `…\bin\vcf-download-tool.bat`（Linux 去 `.bat`）、`<code>` = activation code 單行檔、`<depot>` = 下載輸出夾。
 
+## 0. 拿 Software depot ID（第一次用工具才要做）
+**產一顆 Software depot ID**（工具本機只會有一顆；`--force` 才會蓋掉重產）：
+```
+<tool> configuration generate --software-depot-id
+```
+**讀出目前這顆**（換 code 時要用，貼去 portal 重產 activation code）：
+```
+<tool> configuration get --software-depot-id
+```
+> 流程：`generate` 產 ID → 到 <https://vcf.broadcom.com> 用這顆 ID 產 **activation code** → 存成單行檔 `<code>` → 之後每條指令都帶 `--depot-download-activation-code-file=<code>`。
+> ⚠️ 換 code 用 **`get`** 讀原本那顆 ID 去 portal 重產,**不要 `generate --force`**（換 ID 等於全新綁定）。
+
 ## 1. 驗 code（回 "Depot credentials are valid" = OK）
 ```
 <tool> releases list --depot-download-activation-code-file=<code>
@@ -41,11 +53,6 @@ bash download-latest.sh <tool> <code> <depot> 9.1.0.0
 bash download-latest.sh <tool> <code> <depot> 9.1.0.0 --dry-run
 ```
 > 工具無 `--latest` 旗標;此腳本 list 全版本→每元件挑版本最高→`--id` 下。出新 patch 自動抓新最新。
-
-## 讀 Software depot ID（換 code 用；別 generate 重產）
-```
-<tool> configuration get --software-depot-id
-```
 
 ---
 - `--depot-store` = 下載輸出夾（自動建 `PROD/COMP/…` + `metadata/`）；同夾重跑會累加、跳過已下的
