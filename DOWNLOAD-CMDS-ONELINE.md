@@ -32,6 +32,16 @@
 <tool> binaries download --depot-store=<depot> --depot-download-activation-code-file=<code> --vcf-version=9.1.0.0 --sku=VCF --type=INSTALL --component=VCF_LICENSE_SERVER --component-version=9.1.0.0200 --ceip=DISABLE
 ```
 
+## 3e. 只下「每元件最新版」（wrapper 自動 list→挑最新→下,不用手撈 ID）
+```
+bash download-latest.sh <tool> <code> <depot> 9.1.0.0
+```
+先看要下哪些版本不真下,加 `--dry-run`:
+```
+bash download-latest.sh <tool> <code> <depot> 9.1.0.0 --dry-run
+```
+> 工具無 `--latest` 旗標;此腳本 list 全版本→每元件挑版本最高→`--id` 下。出新 patch 自動抓新最新。
+
 ## 讀 Software depot ID（換 code 用；別 generate 重產）
 ```
 <tool> configuration get --software-depot-id
