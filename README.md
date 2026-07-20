@@ -3,13 +3,17 @@
 Scripts for standing up an **offline VCF Software Depot** for VMware Cloud Foundation 9.x,
 and importing the depot CA certificate into VCF Installer, SDDC Manager, and VCF OPS appliances.
 
-> **Ways to build/deliver the depot** (pick per scenario):
-> - **[DOWNLOAD-INTO-DEPOT.md](DOWNLOAD-INTO-DEPOT.md)** — official VCF Download Tool: activation code → `binaries download` straight into a `PROD/` depot.
-> - **[CUSTOMER-DEPLOY-GUIDE.md](CUSTOMER-DEPLOY-GUIDE.md)** / **[UPLOAD-STEPS.md](UPLOAD-STEPS.md)** — ship a complete depot tar, stand it up (external server or on the installer).
-> - **[DEPLOY_TARBALL_TO_V5_DEPOT.md](DEPLOY_TARBALL_TO_V5_DEPOT.md)** — simple 5-step: scp a depot tar.gz onto a v5 server and extract it into place.
-> - **[OA-FLAT-SORT-DEPOT.md](OA-FLAT-SORT-DEPOT.md)** — customer dumps all downloads flat → `sort-flat-depot.sh` auto-arranges into `PROD/COMP/`.
-> - **[METADATA-ZIP-DEPOT.md](METADATA-ZIP-DEPOT.md)** — official metadata zip + token-downloaded binaries (lightweight).
-> - **[METADATA-ZIP-0400-RUNBOOK.md](METADATA-ZIP-0400-RUNBOOK.md)** — the self-made 0400 metadata zip + flat-sort flow, pinned to the real 9.1.0.0400 files.
+> **三條把 binary 弄上 depot server 的路**（pick one）:
+> - **[路 A — DEPOT-WAY-A-download-tool.md](DEPOT-WAY-A-download-tool.md)** — download-tool 下載（Windows）→ 打包 tar → 傳 depot server。
+> - **[路 B — DEPOT-WAY-B-flat-metadata.md](DEPOT-WAY-B-flat-metadata.md)** — 手動 flat 下載 + metadata zip → `sort-flat-depot.sh` → 傳 depot server。
+> - **[路 C — DEPOT-WAY-C-0400.md](DEPOT-WAY-C-0400.md)** — 路 B 釘死在 9.1.0.0400 這批實際檔案上的 runbook。
+>
+> **其他交付/建法**:
+> - **[DOWNLOAD-INTO-DEPOT.md](DOWNLOAD-INTO-DEPOT.md)** — 官方 VCF Download Tool 下進 `PROD/` depot 的完整流程（路 A 的細節）。
+> - **[DEPLOY_TARBALL_TO_V5_DEPOT.md](DEPLOY_TARBALL_TO_V5_DEPOT.md)** — 把 depot tar.gz scp 上 v5 server 解開的簡單 5 步（路 A step 3–4 細節）。
+> - **[OA-FLAT-SORT-DEPOT.md](OA-FLAT-SORT-DEPOT.md)** — flat 平面歸位 `sort-flat-depot.sh` 完整說明（路 B 的細節）。
+> - **[METADATA-ZIP-DEPOT.md](METADATA-ZIP-DEPOT.md)** — metadata zip + token 自動下 binary（路 B 的進階變體，免手動）。
+> - **[CUSTOMER-DEPLOY-GUIDE.md](CUSTOMER-DEPLOY-GUIDE.md)** / **[UPLOAD-STEPS.md](UPLOAD-STEPS.md)** — 完整 depot tar 客戶交付。
 > - **[MY_VCF_DEPOT.md](MY_VCF_DEPOT.md)** — `My-VcfDepot.ps1` token-only catalog reader / depot builder.
 
 ---
@@ -282,13 +286,19 @@ Also update the Depot URL in **VCF Installer → Administration → Depot Settin
 - [VCF-DOWNLOAD-TOOL.md](VCF-DOWNLOAD-TOOL.md) — the tool itself: install, activation code, commands, flags, gotchas (syntax verified vs `--help`)
 - [DOWNLOAD-CMDS-ONELINE.md](DOWNLOAD-CMDS-ONELINE.md) — copy-paste one-line commands (placeholders)
 
-**Build / deliver a depot**
-- [DOWNLOAD-INTO-DEPOT.md](DOWNLOAD-INTO-DEPOT.md) — official `vcf-download-tool`: activation code → `binaries download` into a `PROD/` depot
-- [CUSTOMER-DEPLOY-GUIDE.md](CUSTOMER-DEPLOY-GUIDE.md) — ship a complete depot tar, two deploy models (external server / on the installer)
-- [UPLOAD-STEPS.md](UPLOAD-STEPS.md) — depot-side + installer-side upload steps (incl. 7z split reassembly)
-- [OA-FLAT-SORT-DEPOT.md](OA-FLAT-SORT-DEPOT.md) — customer dumps downloads flat → `sort-flat-depot.sh` arranges into `PROD/COMP/`
-- [METADATA-ZIP-DEPOT.md](METADATA-ZIP-DEPOT.md) — official metadata zip + token-downloaded binaries
-- [MY_VCF_DEPOT.md](MY_VCF_DEPOT.md) — `My-VcfDepot.ps1` (token-only catalog reader / depot builder)
+**三條上 depot server 的路**
+- [DEPOT-WAY-A-download-tool.md](DEPOT-WAY-A-download-tool.md) — 路 A：download-tool 下載（Windows）→ 打包 tar → 傳
+- [DEPOT-WAY-B-flat-metadata.md](DEPOT-WAY-B-flat-metadata.md) — 路 B：手動 flat + metadata zip → `sort-flat-depot.sh` → 傳
+- [DEPOT-WAY-C-0400.md](DEPOT-WAY-C-0400.md) — 路 C：路 B 釘死 9.1.0.0400
+
+**細節 / 其他建法**
+- [DOWNLOAD-INTO-DEPOT.md](DOWNLOAD-INTO-DEPOT.md) — `vcf-download-tool` 下進 `PROD/` depot（路 A 細節）
+- [DEPLOY_TARBALL_TO_V5_DEPOT.md](DEPLOY_TARBALL_TO_V5_DEPOT.md) — tar.gz scp 上 v5 server 解開（路 A step 3–4 細節）
+- [OA-FLAT-SORT-DEPOT.md](OA-FLAT-SORT-DEPOT.md) — `sort-flat-depot.sh` 平面歸位完整說明（路 B 細節）
+- [METADATA-ZIP-DEPOT.md](METADATA-ZIP-DEPOT.md) — metadata zip + token 自動下 binary（路 B 進階變體）
+- [CUSTOMER-DEPLOY-GUIDE.md](CUSTOMER-DEPLOY-GUIDE.md) — 完整 depot tar 客戶交付（external / on-installer 兩模型）
+- [UPLOAD-STEPS.md](UPLOAD-STEPS.md) — depot 端 + installer 端上傳步驟（含 7z split 重組）
+- [MY_VCF_DEPOT.md](MY_VCF_DEPOT.md) — `My-VcfDepot.ps1`（token-only catalog reader / depot builder）
 
 **RHEL / air-gapped OS**
 - [OFFLINE-OS-REPO.md](OFFLINE-OS-REPO.md) — offline DNF/apt package repos + RHEL VCF depot + `:8888` no-auth endpoint

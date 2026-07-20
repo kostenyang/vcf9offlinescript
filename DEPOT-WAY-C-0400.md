@@ -1,6 +1,8 @@
-# VCF 9.1.0.0400 離線 Depot — 自製 metadata zip + 平面歸位 執行手冊（0400 釘版）
+# 路 C — 0400 這批：自製 metadata zip + 平面歸位 → 傳 depot server（0400 釘版）
 
-把 [METADATA-ZIP-DEPOT.md](METADATA-ZIP-DEPOT.md) / [OA-FLAT-SORT-DEPOT.md](OA-FLAT-SORT-DEPOT.md) 的泛用流程，**釘死在 9.1.0.0400 這批實際檔案**上的一頁式 runbook。
+> 上 depot server 三條路之一 · 另見 [路 A download-tool → tar](DEPOT-WAY-A-download-tool.md) · [路 B 手動 flat + metadata zip](DEPOT-WAY-B-flat-metadata.md)
+
+[路 B](DEPOT-WAY-B-flat-metadata.md) 的流程，**釘死在 9.1.0.0400 這批實際檔案**上的一頁式 runbook。
 
 > 適用情境：客戶自己從 Broadcom portal **手動下載**一堆 flat 檔（不是搬整包 tar），
 > 用**自製 metadata zip** 補上 installer sync 要的 `metadata/`（含 Compatibility），
