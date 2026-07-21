@@ -4,6 +4,9 @@
 
 > 下方每條都附一行 **▸ 範例**（本機 rtolab 實際路徑）：
 > `<tool>`=`E:\vdt0400-test\bin\vcf-download-tool.bat`、`<code>`=`E:\vdt0400-test\actcode.txt`、`<depot>`=`E:\vcf9-depot`
+>
+> ✅ **Windows 執行確認**（2026-07-21 實測）：§0–§3d 全在原生 cmd/PowerShell 跑得動（呼叫 `.bat`）。
+> **只有 §3e 是 bash 腳本,需 Git Bash**。download 若回 403 = 那顆 code 沒下載權限,非語法問題（換有權限的 code 即可）。
 
 ## 0. 拿 Software depot ID（第一次用工具才要做）
 **產一顆 Software depot ID**（工具本機只會有一顆；`--force` 才會蓋掉重產）：
@@ -80,21 +83,21 @@ E:\vdt0400-test\bin\vcf-download-tool.bat binaries download --depot-store=E:\vcf
 ```
 
 ## 3e. 只下「每元件最新版」（wrapper 自動 list→挑最新→下,不用手撈 ID）
+> ⚠️ **這是 bash 腳本,純 Windows cmd/PowerShell 跑不動,要 Git Bash。** 沒 Git Bash 的機器改走下面「純 cmd 替代」。
 ```
 bash download-latest.sh <tool> <code> <depot> 9.1.0.0
 ```
-▸ 範例：
+▸ 範例（有 Git Bash,在 Git Bash 視窗跑）：
 ```
 bash download-latest.sh E:\vdt0400-test\bin\vcf-download-tool.bat E:\vdt0400-test\actcode.txt E:\vcf9-depot 9.1.0.0
 ```
-先看要下哪些版本不真下,加 `--dry-run`:
+▸ 在 cmd 想直接叫 Git Bash 跑（用 bash.exe 全路徑）：
 ```
-bash download-latest.sh <tool> <code> <depot> 9.1.0.0 --dry-run
+"C:\Program Files\Git\bin\bash.exe" download-latest.sh E:\vdt0400-test\bin\vcf-download-tool.bat E:\vdt0400-test\actcode.txt E:\vcf9-depot 9.1.0.0
 ```
-▸ 範例：
-```
-bash download-latest.sh E:\vdt0400-test\bin\vcf-download-tool.bat E:\vdt0400-test\actcode.txt E:\vcf9-depot 9.1.0.0 --dry-run
-```
+先看要下哪些版本不真下,加 `--dry-run`。
+
+**純 cmd 替代（沒 Git Bash）**：跑 §2 `binaries list`,肉眼挑每元件版本最高那列的 ID,填進 §3b `--id=` 下載。效果一樣,只是手動挑。
 > 工具無 `--latest` 旗標;此腳本 list 全版本→每元件挑版本最高→`--id` 下。出新 patch 自動抓新最新。
 
 ---
