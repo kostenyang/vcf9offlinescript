@@ -87,6 +87,48 @@ govc guest.run -vm "$VM" -l "$L" /usr/bin/python3 /home/vcf/add_trusted_certific
 
 ---
 
+## 步驟 5 — 設定 / 驗證 fleet 的 depot 連線(純 API,不用 UI 登入)
+
+CA 信任好之後,就能設 depot 連線。fleet 的 depot-service(`vcf-m02-fleet01`)要 **VSP 發的 Bearer token**
+(`Bearer realm="VCF"`;SDDC Manager `/v1/tokens`、VCFA provider token 都會被 `INVALID_TOKEN_ISSUER` 拒)。
+
+**① 跟 VSP 拿 token**(同 `add_trusted_certificate.py` 內部那招):
+```bash
+VSP=vcf-m02-vsp01.home.lab
+TOK=$(curl -sk -X POST "https://$VSP/api/v1/identity/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" -H "Accept: application/json" \
+  --data-urlencode grant_type=password \
+  --data-urlencode username=admin@vsp.local \
+  --data-urlencode password='<VSP-admin-pw>' | jq -r .access_token)
+```
+
+**② 看目前 depot 連線設定**:
+```bash
+FLEET=vcf-m02-fleet01.home.lab
+curl -sk -H "Authorization: Bearer $TOK" "https://$FLEET/depot-service/api/depot/v1/connectivity"
+# {"depotType":"OFFLINE","offlineDepot":{"url":"https://...","username":"vcfdepot"}}
+```
+
+**③ 設(或改)成 offline depot**(用憑證 SAN 裡的 **FQDN**,不要用 IP):
+```bash
+curl -sk -X PUT "https://$FLEET/depot-service/api/depot/v1/connectivity" \
+  -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" \
+  -d '{"depotType":"OFFLINE","offlineDepot":{
+        "url":"https://vcf9depotserver.home.lab",
+        "username":"vcfdepot","password":"<depot-pw>"}}'
+# HTTP 202 (async) → GET 回來 url 應變成 https://vcf9depotserver.home.lab:443
+```
+
+### 實測(2026-07-17 本 lab M02)
+```
+GET  connectivity → {"depotType":"OFFLINE","offlineDepot":{"url":"https://10.0.0.61:443","username":"vcfdepot"}}
+PUT  connectivity (改 FQDN) → HTTP 202
+GET  connectivity → url = https://vcf9depotserver.home.lab:443    ← 無憑證錯誤 = CA 信任生效
+```
+> UI 驗證:VCF Operations → Fleet Management → Lifecycle → **Software Depot** 應顯示 Connected + 可用 bundle。
+
+---
+
 ## 常見錯誤指紋
 | 症狀 | 原因 / 對策 |
 |---|---|
