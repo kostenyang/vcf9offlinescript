@@ -129,6 +129,32 @@ GET  connectivity → url = https://vcf9depotserver.home.lab:443    ← 無憑�
 
 ---
 
+## 步驟 6 — UI 佐證(VCF Operations)
+
+> ⚠️ **重點 / 誠實提醒**:VCF 9.1 的 **depot 連線設定本身沒有獨立的 VCF Operations UI 頁** ——
+> 它是 **API / SDDC Manager 管的**(見步驟 5 的 `depot-service/api/depot/v1/connectivity`)。
+> Fleet Management 導覽列只有 Certificates / Passwords / Identity & Access / Tags /
+> Configuration Management / Fleet Settings(Fleet Settings 底下只有 Password Policy / DNS / NTP),
+> **沒有** Software Depot 連線設定分頁。所以 UI 端能拿到的最佳佐證是
+> **Inventory 裡的 `VCF Depot Service` 物件健康狀態**。
+
+在 **VCF Operations → Operate → Inventory**,物件樹展開 → **VCF Depot Service → depot-service**,
+Summary 分頁實測(2026-07-17 本 lab M02,CA 匯入 + 連線設好之後):
+
+| 欄位 | 值 |
+|---|---|
+| Object Type | **VCF Depot Service** |
+| Badge Health | **100 %** |
+| Badge Efficiency | 100 % |
+| Badge Risk | 0 % |
+| Objects | **1 Normal**(Critical/Immediate/Warning/Unknown 全 0) |
+| Alerts | **No Alerts found** |
+
+→ depot-service 物件 **綠燈 / Normal / 0 告警**,佐證 depot 連線 + CA 信任生效後服務健康運行。
+(此為監控視角;連線的實際設定值請以步驟 5 的 API GET `connectivity` 為準。)
+
+---
+
 ## 常見錯誤指紋
 | 症狀 | 原因 / 對策 |
 |---|---|
