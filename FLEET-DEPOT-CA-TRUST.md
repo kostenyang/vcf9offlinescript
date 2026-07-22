@@ -94,6 +94,28 @@ govc guest.run -vm "$VM" -l "$L" /usr/bin/python3 /home/vcf/add_trusted_certific
 | `Failed to connect to authorization server to obtain access token` | 同上(KB 442978) |
 | depot 連線一直跳憑證信任 / `errors syncing the LCM software depot` | depot 憑證 **SAN 缺 FQDN 或 IP**(KB 424807)→ 重簽 depot 憑證 |
 
+## 除錯(2026-07-17 本 lab M02 實測踩到的坑)
+
+1. **`govc guest.run/start` 用 `bash -c '複雜指令'` → 空 log / 沒跑到**
+   引號經 bash → govc → guest 被吃掉,實際指令跑錯,log 檔 0 bytes。
+   ✅ 改用 **`guest.run` 直接帶程式+參數**(同步收 stdout):
+   `govc guest.run -vm <VM> -l root:<pw> /usr/bin/python3 /home/vcf/add_trusted_certificate.py --vsp-fqdn ... --cert-file ...`
+
+2. **appliance keytool 匯 CA:SDDC Manager 成功、VCF OPS 失敗(且這不是 fleet 該匯的地方)**
+   - `import_vcf9depot_ca.sh` 在 **SDDC Manager** 的 java21 cacerts:直接 OK。
+   - **VCF OPS(vROps)**的 2 個 keystore(`/usr/java/jre-vmware-17`、`/usr/lib/vmware-vcops/jre`):
+     `keytool` 預設(JKS)報 `Unrecognized keystore format`;`-storetype PKCS12` 報 `DerValue.getBigIntegerInternal, not expected 48`;`-cacerts` 也 `Unrecognized keystore format`
+     → 這些是 **FIPS/BCFKS** 格式,keytool 一般模式吃不下。
+     ✅ **別用 keytool,走 VCF Operations UI → Operate → Administration Control Panel → Trusted Certificates → Import(PEM)**。
+   - 🔴 **重點**:appliance keytool 匯入 **不是** Fleet Depot Service 讀 trust 的地方 → 一定要跑 `add_trusted_certificate.py` 匯進 **VSP 平台**(本文件主流程)。
+
+3. **fleet depot-service API token 被拒 `VCF_LCM_IAM_401_INVALID_TOKEN_ISSUER_ERR`**
+   `https://<fleet01>/depot-service/api/depot/v1/connectivity` 要 `Bearer realm="VCF"`。
+   用 **SDDC Manager `/v1/tokens`** 或 **VCFA `/cloudapi/1.0.0/sessions/provider`** 拿的 token 都被拒(issuer 對不上)。
+   ✅ 正確 issuer = **VSP 發的 token**(`admin@vsp.local`,就是 `add_trusted_certificate.py` 內部 acquire 的那個);要純 API 設 depot 連線就用它。
+
+4. **appliance 不能直接 SSH(STIG 硬化)** → 用 **vCenter guest-ops**(VMware Tools,`root/<root-pw>`)上傳 + 執行,繞過 sshd faillock。
+
 ## 相關
 - **KB 442978** — VCF 9.1 Software Depot cert + `add_trusted_certificate.py`(腳本來源)
 - **KB 424807** — depot 憑證 SAN(FQDN+IP)要求
