@@ -153,6 +153,8 @@ Summary 分頁實測(2026-07-17 本 lab M02,CA 匯入 + 連線設好之後):
 → depot-service 物件 **綠燈 / Normal / 0 告警**,佐證 depot 連線 + CA 信任生效後服務健康運行。
 (此為監控視角;連線的實際設定值請以步驟 5 的 API GET `connectivity` 為準。)
 
+![現行 home.lab M02 實截:VCF Operations → Inventory → VCF Depot Service「depot-service」→ Summary,Badge Health 100% / Efficiency 100% / Risk 0% / 1 Normal / No Alerts found(2026-07-23 live capture)](images/depot-service-health.png)
+
 ---
 
 ## 常見錯誤指紋
