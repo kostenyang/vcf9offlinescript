@@ -4,6 +4,11 @@
 `--proxy-server` 就能整條走 proxy（認證 / 列版本 / metadata / binary 下載全部）。本文含
 proxy 準備、帶 proxy 的完整指令（**含實際下載**）、以及一次實測驗證。
 
+> ✅ **這就是官方做法**：`--proxy-server` / `--proxy-https` / `--proxy-user` / `--proxy-user-password-file`
+> 是官方 VCF Download Tool 內建旗標，Broadcom techdocs 明載。官方限制：
+> **不支援 Kerberos / NTLMv2 認證的 proxy**；`--proxy-https`（proxy 本身走 HTTPS）需把 **proxy 憑證匯入工具 JRE trust store**；長時間下載建議在 SSH client 設 **TCP keepalive** 防 socket timeout。
+> 官方頁：<https://techdocs.broadcom.com/us/en/vmware-cis/vcf/vcf-9-0-and-later/9-1/lifecycle-management/binary-management-for-vmware-cloud-foundation/offline-download-of-vmware-cloud-foundation-5-2-upgrade-bundles.html>
+
 > 路徑 sample：工具 `C:\VCF9\bin\vcf-download-tool.bat`、code `C:\VCF9\actcode.txt`、輸出 `C:\VCF9\depot`、proxy `<PROXY_IP>:3128`。
 
 ---
@@ -154,9 +159,11 @@ CONNECT vsanhealth.vmware.com:443    # vSAN HCL
 
 | 旗標 | 說明 |
 |---|---|
-| `--proxy-server=<FQDN:Port>` | proxy 位址（**必要**） |
-| `--proxy-https` | 「連 proxy 用 HTTPS」才加；一般 HTTP proxy **不要加** |
-| `--proxy-user=<u>` | proxy 需認證時的帳號 |
+| `-s, --proxy-server=<FQDN:Port>` | proxy 位址（**必要**） |
+| `--proxy-https` | 「連 proxy 用 HTTPS」才加；一般 HTTP proxy **不要加**。加了要把 **proxy 憑證匯入工具 JRE trust store** |
+| `-r, --proxy-user=<u>` | proxy 需認證時的帳號 |
 | `--proxy-user-password-file=<file>` | proxy 密碼檔（單行） |
+
+> ⚠️ 官方限制：**不支援 Kerberos / NTLMv2 認證的 proxy**；長時間下載在 SSH client 設 **TCP keepalive** 防 timeout。
 
 > 相關：一般（不走 proxy）指令見 [DOWNLOAD-CMDS-ONELINE.md](DOWNLOAD-CMDS-ONELINE.md) / email 版 [DOWNLOAD-CMDS-EMAIL.md](DOWNLOAD-CMDS-EMAIL.md)；工具手冊 [VCF-DOWNLOAD-TOOL.md](VCF-DOWNLOAD-TOOL.md)。
