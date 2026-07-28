@@ -296,6 +296,7 @@ Also update the Depot URL in **VCF Installer → Administration → Depot Settin
 - [DEPLOY_TARBALL_TO_V5_DEPOT.md](DEPLOY_TARBALL_TO_V5_DEPOT.md) — tar.gz scp 上 v5 server 解開（路 A step 3–4 細節）
 - [OA-FLAT-SORT-DEPOT.md](OA-FLAT-SORT-DEPOT.md) — `sort-flat-depot.sh` 平面歸位完整說明（路 B 細節）
 - [METADATA-ZIP-DEPOT.md](METADATA-ZIP-DEPOT.md) — metadata zip + token 自動下 binary（路 B 進階變體）
+- [DOWNLOAD-VIA-PROXY-WINDOWS.md](DOWNLOAD-VIA-PROXY-WINDOWS.md) — Windows 版 download-tool 走 forward proxy（含自建 proxy + 實測）
 - [CUSTOMER-DEPLOY-GUIDE.md](CUSTOMER-DEPLOY-GUIDE.md) — 完整 depot tar 客戶交付（external / on-installer 兩模型）
 - [UPLOAD-STEPS.md](UPLOAD-STEPS.md) — depot 端 + installer 端上傳步驟（含 7z split 重組）
 - [MY_VCF_DEPOT.md](MY_VCF_DEPOT.md) — `My-VcfDepot.ps1`（token-only catalog reader / depot builder）
