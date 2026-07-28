@@ -107,4 +107,4 @@ bash download-latest.sh E:\vdt0400-test\bin\vcf-download-tool.bat E:\vdt0400-tes
 - Linux 路徑同理：`<tool>`→`/opt/vdt/bin/vcf-download-tool`、`<depot>`→`/opt/vcf-depot/vcf9`
 - code 有時效；過期或 binary 403 → 換一顆有下載權限的 code（同 software depot ID 重產）
 
-> 完整說明見 [VCF-DOWNLOAD-TOOL.md](VCF-DOWNLOAD-TOOL.md)；下成 depot 的流程見 [DOWNLOAD-INTO-DEPOT.md](DOWNLOAD-INTO-DEPOT.md)。
+> 完整說明見 [VCF-DOWNLOAD-TOOL.md](VCF-DOWNLOAD-TOOL.md)；下成 depot 的流程見 [DOWNLOAD-INTO-DEPOT.md](DOWNLOAD-INTO-DEPOT.md)；**寄信用純文字絕對路徑版**見 [DOWNLOAD-CMDS-EMAIL.md](DOWNLOAD-CMDS-EMAIL.md)。
