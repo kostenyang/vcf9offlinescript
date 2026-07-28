@@ -106,7 +106,25 @@ C:\VCF9\bin\vcf-download-tool.bat binaries download --depot-store=C:\VCF9\depot 
 
 ---
 
-## 3. 實測驗證（rtolab, 2026-07-28）
+## 3. 下法（確認過的步驟）
+
+照順序做;右欄是本次（2026-07-28 rtolab）**實測到的狀態**。
+
+| 步驟 | 指令（都加 `--proxy-server=<PROXY_IP>:3128`） | 已驗證 |
+|------|----------------------------------------------|--------|
+| **① 起/確認 proxy** | 第 1 節 B) `systemctl is-active testproxy` = active、`ss -ltn｜grep 3128` | ✅ proxy listening、Windows 可達 |
+| **② 驗 code 經 proxy** | `releases list --proxy-server=… --depot-download-activation-code-file=…` | ✅ exit=0、`Proxy configuration completed` |
+| **③ 列版本挑 ID** | `binaries list --vcf-version=9.1.0.0 --sku=VCF --automated-install --type=INSTALL --proxy-server=… --…code-file=…` | ✅ exit=0、回 16 元件目錄（ID 在每列最前） |
+| **④ 實際下載** | `binaries download --depot-store=C:\VCF9\depot --proxy-server=… --…code-file=… --id=<挑到的ID> --ceip=DISABLE` | ⚠️ 請求已穿 proxy 到 `dl.broadcom.com`;**bytes 需有下載權限的 code**（本次 code 無權限 → 403，非 proxy/指令問題） |
+| **⑤ 確認結果** | 結尾看 `N SUCCESS / 0 FAILED`;`C:\VCF9\depot\PROD\COMP\…` 出現檔案 + `metadata\` | 待有權限 code 補綠 |
+
+**流程確認結論**：①②③ 全綠、④ 的下載路徑已證實走 proxy。**下法本身正確**，唯一變數是 code 的下載 entitlement —— 換一顆有權限的 code，④ 就會實際落檔（同指令、不用改 proxy 設定）。
+
+> 驗 proxy 真的有走：在 Linux 上 `journalctl -u testproxy -f`,執行上面任一步時會看到 `CONNECT eapi.broadcom.com:443` / `dl.broadcom.com:443` 等記錄。
+
+---
+
+## 4. 實測驗證（rtolab, 2026-07-28）
 
 proxy = 自建 python CONNECT proxy on depot server `172.16.10.50:3128`；工具在 Windows（`172.16.10.32`）。
 
@@ -132,7 +150,7 @@ CONNECT vsanhealth.vmware.com:443    # vSAN HCL
 
 ---
 
-## 4. Proxy 旗標速查
+## 5. Proxy 旗標速查
 
 | 旗標 | 說明 |
 |---|---|
