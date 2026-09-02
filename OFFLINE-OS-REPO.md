@@ -16,7 +16,7 @@ VCF depot（跟主線 Ubuntu 的 `create_vcf9_depot_server_v5.sh` 對應）。
 | `setup_rhel_offline_all.sh` | RHEL/Rocky/Alma **一體式**：同一台一個 nginx 同時跑 ① DNF repo(HTTP:80) ② VCF depot(HTTPS:443) |
 | `create_vcf9_depot_server_rhel.sh` | **RHEL 版** VCF 離線 depot（nginx，HTTPS+Basic-auth，可與其他服務共存於同 host）|
 | `change_rhel_offline_hostname_ip.sh` | 改上述 RHEL 離線 server 的 hostname/IP，並同步更新所有引用（/etc/hosts、nginx、cert…）|
-| `ubuntu_offline_packages.sh` | Ubuntu 無安裝 DVD repo → **預先在有網機器抓 .deb 包**、帶進 air-gapped Ubuntu 離線安裝 |
+| `ubuntu_offline_packages.sh` | Ubuntu 無安裝 DVD repo → **預先在有網機器抓 .deb 包**、帶進 air-gapped Ubuntu 離線安裝。<br>💡 20.04 / 22.04 / 24.04 **已有 build 好的包**放在 [Releases](https://github.com/kostenyang/vcf9offlinescript/releases/tag/ubuntu-offline-2004)，可直接下載免自己 build（見場景 C）|
 
 ---
 
@@ -48,13 +48,60 @@ sudo bash create_vcf9_depot_server_rhel.sh --fqdn <FQDN> --ip <IP> --web-server 
 ```
 
 ## 場景 C：air-gapped Ubuntu 先離線化套件
+
+Ubuntu 沒有像 RHEL 那種可當 repo 的安裝 DVD，所以離線裝 nginx 這類套件，
+必須先在**有網路**的機器抓好完整相依樹再帶進去。
+
+### 快路：直接下載已 build 好的包（GitHub Release）
+
+已預先 build 好 20.04 / 22.04 / 24.04 三個版本，**不用自己 build**：
+
 ```bash
-# 有網機器:抓 nginx/openssl/keytool 等 .deb 成一包
-bash ubuntu_offline_packages.sh --download -o vcf-depot-debs.tar
-# air-gapped Ubuntu:帶進去離線安裝,再跑主線 create_vcf9_depot_server_v5.sh
-bash ubuntu_offline_packages.sh --install -i vcf-depot-debs.tar
+gh release download ubuntu-offline-2004 -R kostenyang/vcf9offlinescript -p 'ubuntu-nginx-offline-2404-amd64.tar.gz'
+```
+```bash
+curl -LO https://github.com/kostenyang/vcf9offlinescript/releases/download/ubuntu-offline-2004/ubuntu-nginx-offline-2404-amd64.tar.gz
+```
+
+| 附件 | 大小 | 對應 Ubuntu |
+|---|---|---|
+| `ubuntu-nginx-offline-2004-amd64.tar.gz` | 35.7 MB | 20.04 |
+| `ubuntu-nginx-offline-2204-amd64.tar.gz` | 66.0 MB | 22.04 |
+| `ubuntu-nginx-offline-2404-amd64.tar.gz` | 10.9 MB | 24.04 |
+
+內容皆為 `nginx apache2-utils openssl` 的**完整相依樹**。
+（大小差很多是因為各 release 基底映像已內含的套件不同 —— 24.04 帶得多，要補的就少。）
+
+> 🔴 **版本與架構必須完全相符** —— 24.04 的 .deb 不能裝在 22.04 上。先確認目標機：
+> ```bash
+> lsb_release -rs && dpkg --print-architecture
+> ```
+
+### 慢路：自己 build（清單不同或非 amd64 時）
+
+在**有網路、且與目標機同 release + 同架構**的 Ubuntu 上：
+
+```bash
+sudo bash ubuntu_offline_packages.sh --build --packages "nginx apache2-utils openssl" --output /root/ubuntu-nginx-offline.tar.gz
+```
+
+### 帶進 air-gapped Ubuntu 安裝
+
+```bash
+sudo bash ubuntu_offline_packages.sh --install --bundle ./ubuntu-nginx-offline-2404-amd64.tar.gz
+```
+```bash
 sudo bash create_vcf9_depot_server_v5.sh --fqdn <FQDN> --ip <IP> --web-server nginx --skip-disk-setup
 ```
+
+### 旗標
+
+| 旗標 | 說明 |
+|---|---|
+| `--build` / `--install` | 模式（擇一） |
+| `--packages "<pkg1> <pkg2>"` | 要抓的套件，預設 `nginx apache2-utils openssl` |
+| `--output <file>.tar.gz` | build 輸出，預設 `/root/ubuntu-offline-packages.tar.gz` |
+| `--bundle <file>.tar.gz` | install 讀取的包 |
 
 ## 額外：depot 開一個 `:8888` no-auth HTTP 端點（9.1 新 HTTP offline depot 用）
 VCF 9.1 支援**免認證 HTTP** offline depot（僅 API 可設，UI 不行）。在 depot server 加一段 nginx：
