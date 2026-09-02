@@ -74,7 +74,7 @@ sudo bash import_vcf9depot_ca.sh \
 | **`change_depot_hostname_ip.sh`** | **Change hostname and/or IP after initial setup — regenerates cert automatically** |
 | `fix_sshd_config.sh` | Fix duplicate sshd_config entries from sftpv1.sh |
 | `sftpv1.sh` / `test_sftp.sh` | SFTP setup and connectivity test |
-| `ubuntu_offline_packages.sh` | Build / install an offline `.deb` bundle for air-gapped Ubuntu. **Prebuilt bundles for 20.04 / 22.04 / 24.04 are attached to [Releases](https://github.com/kostenyang/vcf9offlinescript/releases/tag/ubuntu-offline-2004)** — see [OFFLINE-OS-REPO.md](OFFLINE-OS-REPO.md) |
+| `ubuntu_offline_packages.sh` | Build / install an offline `.deb` bundle for air-gapped Ubuntu. **Prebuilt bundles for 20.04 / 22.04 / 24.04 are attached to [Releases](https://github.com/kostenyang/vcf9offlinescript/releases/tag/ubuntu-vcfdepot-offline)** — see [OFFLINE-OS-REPO.md](OFFLINE-OS-REPO.md) |
 
 ---
 
