@@ -61,11 +61,15 @@ elif command -v apt-get >/dev/null 2>&1;then PKG=apt
 else die "找不到 dnf/yum/apt-get,不支援的發行版"; fi
 
 # RHEL 服務名是 sshd,Debian/Ubuntu 是 ssh
-if systemctl list-unit-files 2>/dev/null | grep -qE '^sshd\.service'; then
-  SSHD_SVC=sshd
-else
-  SSHD_SVC=ssh
-fi
+# 🔴 不要寫成 `systemctl ... | grep -q ...`:grep -q 匹配後立刻結束,
+#    systemctl 收到 SIGPIPE 以 141 結束,在 set -o pipefail 下整條 pipeline
+#    被判定為失敗 → 永遠走 else 分支。實測在 RHEL 9.8 上就是這樣誤判成 ssh。
+#    先把輸出收進變數再比對即可避開。
+_units="$(systemctl list-unit-files --no-pager --type=service 2>/dev/null || true)"
+case "$_units" in
+  *sshd.service*) SSHD_SVC=sshd ;;
+  *)              SSHD_SVC=ssh  ;;
+esac
 
 OS_NAME="$(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-unknown}")"
 info "OS       : ${OS_NAME}"
