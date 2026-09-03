@@ -47,7 +47,7 @@ while [ $# -gt 0 ]; do
     --users)       USERS="$2"; shift 2;;
     --no-firewall) DO_FIREWALL=0; shift;;
     --dry-run)     DRY=1; shift;;
-    -h|--help)     sed -n '2,30p' "$0"; exit 0;;
+    -h|--help)     awk 'NR==1{next} /^# ={10,}$/{c++; if(c==2) exit} {sub(/^# ?/,""); print}' "$0"; exit 0;;
     *) die "未知參數: $1";;
   esac
 done
