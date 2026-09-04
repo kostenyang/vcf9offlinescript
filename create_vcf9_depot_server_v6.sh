@@ -39,7 +39,7 @@ set -euo pipefail
 # ===========================================================================
 
 SCRIPT_NAME="$(basename "$0")"
-SCRIPT_VERSION="6.0.0"
+SCRIPT_VERSION="6.1.0"
 
 # ---------------------------------------------------------------------------
 # Configuration defaults
@@ -97,6 +97,7 @@ DOWNLOAD_BINARIES="false"
 OPEN_FIREWALL="true"
 IMPORT_CA="false"
 CA_URL=""
+REPAIR_ONLY="false"       # --repair: 只修既有 depot 權限,不重建
 
 # Internal — set by detect_web_user()
 WEB_USER=""
@@ -168,6 +169,9 @@ CA / import options:
 
 Misc:
   --skip-firewall              Do not configure the firewall
+  --repair                     Only fix permissions on an existing depot
+                               (owner=web user, a+rX, parent traversal),
+                               then exit. For a depot returning 403.
   --help                       Show this help
 
 Examples:
@@ -232,9 +236,15 @@ parse_args() {
       --ca-url)             CA_URL="${2:-}";                 shift 2 ;;
       --skip-firewall)      OPEN_FIREWALL="false";           shift 1 ;;
       --help|-h)            usage; exit 0 ;;
+      --repair)             REPAIR_ONLY="true";              shift 1 ;;
       *) die "Unknown argument: $1  (run with --help)" ;;
     esac
   done
+
+  # --repair 只修權限,不需要 FQDN/IP/憑證等驗證 — 提前結束參數檢查。
+  if [[ "${REPAIR_ONLY}" == "true" ]]; then
+    return 0
+  fi
 
   # --- v6: --fqdn / --ip 沒給就從 OS 抓 ---------------------------------
   # 🔴 `hostname -f` 在沒有設定 search domain 的機器上只會回 short name,
@@ -429,9 +439,51 @@ create_depot_tree() {
   # but a convenience symlink under WEB_ROOT helps direct access via browser).
   ln -sfn "${depot_data_root}/PROD" "${WEB_ROOT}/PROD" 2>/dev/null || true
 
+  fix_depot_permissions
+}
+
+# ---------------------------------------------------------------------------
+# Permissions — 可獨立呼叫(--repair),也在建立 depot 後呼叫。
+#
+# 🔴 v5/v6-early 用 0500 目錄 / 0400 檔案的「鎖死」模型,在真實環境很脆弱:
+#   1. ${DEPOT_ROOT} 若是自訂掛載點(例如 /userap),root 擁有、others 沒有 x,
+#      web user 穿不過去 -> 底下再完美也回 403。
+#   2. 事後用 root 跑 download tool 補檔,新檔是 root:root 644,
+#      web user 讀不到 -> 又 403。每次補料都要重跑 chmod,維運地獄。
+#
+# v6 改用 a+rX 模型(目錄 755 / 檔案 644,屬 web user):
+#   - 目錄可穿越+可列;檔案可讀。這正是 download tool 寫檔的自然權限。
+#   - 補料後重跑本函式(或 --repair)即可,冪等、不怕重下。
+#   - depot 走 HTTPS + basic auth 控管存取,檔案在磁碟上 world-readable
+#     不是威脅模型(內容就是 VCF binaries)。
+# ---------------------------------------------------------------------------
+fix_depot_permissions() {
+  local depot_data_root="${DEPOT_ROOT}/${DEPOT_NAME}"
+  [[ -d "${depot_data_root}" ]] || die "Depot dir not found: ${depot_data_root}"
+
+  info "Fixing permissions on ${depot_data_root} (owner=${WEB_USER}, mode=a+rX)"
   chown -R "${WEB_USER}:${WEB_USER}" "${depot_data_root}"
-  find "${depot_data_root}" -type d -exec chmod 0500 {} +
-  find "${depot_data_root}" -type f -exec chmod 0400 {} +
+  chmod -R a+rX "${depot_data_root}"
+
+  # 父目錄鏈補「穿越」權限(o+x),讓 web user 進得了自訂的 DEPOT_ROOT。
+  # 只加 x,不開放讀取/列目錄,對 /userap 等既有用途安全。
+  local _p="${depot_data_root}"
+  while [[ "${_p}" != "/" && -n "${_p}" ]]; do
+    chmod o+x "${_p}" 2>/dev/null || true
+    _p="$(dirname "${_p}")"
+  done
+  info "Traversal (o+x) ensured on parent chain up to /"
+
+  # 冒煙測試:用 web user 身分真的讀得到 catalog 嗎(有的話)
+  local _cat="${depot_data_root}/PROD/metadata/productVersionCatalog/v1/productVersionCatalog.json"
+  if [[ -f "${_cat}" ]]; then
+    if sudo -u "${WEB_USER}" test -r "${_cat}" && sudo -u "${WEB_USER}" head -c1 "${_cat}" >/dev/null 2>&1; then
+      info "Smoke test OK — ${WEB_USER} can read the catalog"
+    else
+      warn "Smoke test FAILED — ${WEB_USER} still cannot read ${_cat}"
+      warn "Check the parent chain manually:  namei -l ${_cat}"
+    fi
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -957,6 +1009,18 @@ main() {
   parse_args "$@"
 
   info "VCF 9.1 Offline Depot — ${SCRIPT_NAME} v${SCRIPT_VERSION}"
+
+  # --repair: 只修既有 depot 的權限/擁有者/父目錄穿越,不碰其他。
+  # 現場救援用(例如換了 --depot-root 到 /userap 後 nginx 回 403)。
+  if [[ "${REPAIR_ONLY}" == "true" ]]; then
+    info "REPAIR mode — only fixing permissions on ${DEPOT_ROOT}/${DEPOT_NAME}"
+    detect_web_user
+    fix_depot_permissions
+    configure_selinux 2>/dev/null || true   # RHEL: 重套 fcontext
+    info "Repair done. Reload web server if needed:  systemctl reload nginx (or httpd/apache2)"
+    exit 0
+  fi
+
   info "Web server  : ${WEB_SERVER}"
   info "FQDN        : ${DEPOT_FQDN}"
   info "VCF version : ${VCF_VERSION}"
