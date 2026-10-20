@@ -16,6 +16,7 @@
 #   bash installer-local-depot.sh --zip  vcf-9.1.1.0-offline-depot-metadata-full.zip
 #   bash installer-local-depot.sh --tar  vcf911-depot.tar.gz
 #   bash installer-local-depot.sh --dir  /nfs/vmware/vcf/nfs-mount/local-depot   # 已解好,只起服務+sync
+#   bash installer-local-depot.sh --dir  /nfs/vmware/vcf/nfs-mount/vcf911         # download tool -d= 下載好的 depot
 #   bash installer-local-depot.sh --stop                                         # 停本機 server
 #   bash installer-local-depot.sh --stop --restore-url https://10.0.0.61 --restore-user vcfdepot
 #
@@ -33,6 +34,7 @@ SRC_ZIP=""
 SRC_TAR=""
 DO_STOP=false
 NO_SYNC=false
+FORCE=false
 RESTORE_URL=""
 RESTORE_USER=""
 LOG=/tmp/vcf-local-depot.log
@@ -41,7 +43,7 @@ info() { echo "[INFO] $*"; }
 warn() { echo "[WARN] $*" >&2; }
 die()  { echo "[ERROR] $*" >&2; exit 1; }
 
-usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
+usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -51,6 +53,7 @@ while [[ $# -gt 0 ]]; do
     --port)         PORT="$2"; shift 2 ;;
     --user)         API_USER="$2"; shift 2 ;;
     --no-sync)      NO_SYNC=true; shift ;;
+    --force)        FORCE=true; shift ;;
     --stop)         DO_STOP=true; shift ;;
     --restore-url)  RESTORE_URL="$2"; shift 2 ;;
     --restore-user) RESTORE_USER="$2"; shift 2 ;;
@@ -135,6 +138,19 @@ mkdir -p "$DEPOT_DIR"
 avail=$(df -Pk "$DEPOT_DIR" | awk 'NR==2{print $4}')
 if [[ -n "$SRC_ZIP" ]]; then
   [[ -f "$SRC_ZIP" ]] || die "找不到 $SRC_ZIP"
+  # 目錄裡已經有 catalog(例如 download tool 下的)→ zip 比較舊就不要蓋,避免 metadata 倒退
+  _cur="$DEPOT_DIR/PROD/metadata/productVersionCatalog/v1/productVersionCatalog.json"
+  if [[ -f "$_cur" ]] && ! $FORCE; then
+    read -r _cs _zs < <(python3 -c '
+import json,sys,zipfile
+cur=json.load(open(sys.argv[1]))["sequenceNumber"]
+z=zipfile.ZipFile(sys.argv[2])
+n=[x for x in z.namelist() if x.endswith("productVersionCatalog/v1/productVersionCatalog.json")]
+print(cur, json.loads(z.read(n[0]))["sequenceNumber"] if n else -1)' "$_cur" "$SRC_ZIP")
+    if (( _zs < _cs )); then
+      die "zip 的 catalog(seq $_zs)比 $DEPOT_DIR 現有的(seq $_cs)舊,不蓋。不需要 zip,直接 --dir $DEPOT_DIR;硬要蓋加 --force"
+    fi
+  fi
   info "解 metadata zip → $DEPOT_DIR"
   python3 -c 'import zipfile,sys;zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$SRC_ZIP" "$DEPOT_DIR"
 elif [[ -n "$SRC_TAR" ]]; then
@@ -148,7 +164,13 @@ CAT="$DEPOT_DIR/PROD/metadata/productVersionCatalog/v1/productVersionCatalog.jso
 [[ -f "$CAT" ]] || die "$DEPOT_DIR 底下沒有 PROD/metadata/productVersionCatalog — 內容結構不對(頂層要是 PROD/)"
 [[ -f "$DEPOT_DIR/PROD/COMP/SDDC_MANAGER_VCF/Compatibility/VmwareCompatibilityData.json" ]] \
   || warn "缺 Compatibility 檔,sync 可能卡 'Vmware compatibility data download failed'"
-chmod -R a+rX "$DEPOT_DIR"
+# download tool 常用 root 跑 → 檔案是 root 的,vcf 改不了權限;改不了沒關係,只要讀得到
+chmod -R a+rX "$DEPOT_DIR" 2>/dev/null || true
+unread=$( { find "$DEPOT_DIR/PROD" ! -readable -print; find "$DEPOT_DIR/PROD" -type d ! -executable -print; } 2>/dev/null | head -5)
+if [[ -n "$unread" ]]; then
+  echo "$unread" | sed 's/^/    /' >&2
+  die "上面這些 $(id -un) 讀不到 → 用 root 跑一次:chmod -R a+rX $DEPOT_DIR"
+fi
 seq=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["sequenceNumber"])' "$CAT")
 info "depot 內容 OK:$(find "$DEPOT_DIR/PROD" -type f | wc -l) 檔,catalog sequenceNumber=$seq"
 
@@ -165,9 +187,10 @@ warn "這是 nohup 背景程序,installer 重開機會消失 → 重開後再跑
 if $NO_SYNC; then info "--no-sync:不改 installer 設定,結束"; exit 0; fi
 get_token
 prev=$(api GET /v1/system/settings/depot)
-echo "$prev" > "$DEPOT_DIR/.prev-depot-settings.json"
+PREV_FILE="${HOME:-/tmp}/.vcf-local-depot-prev.json"   # 不寫進 depot 目錄:那裡可能是 root 的
+echo "$prev" > "$PREV_FILE" 2>/dev/null || { PREV_FILE=/tmp/.vcf-local-depot-prev.json; echo "$prev" > "$PREV_FILE"; }
 prev_url=$(echo "$prev" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("depotConfiguration",{}).get("url",""))' 2>/dev/null || true)
-info "原本 depot 設定:${prev_url:-(無)}(已存 $DEPOT_DIR/.prev-depot-settings.json)"
+info "原本 depot 設定:${prev_url:-(無)}(已存 $PREV_FILE)"
 
 # 🔴 HTTP 不能帶 offlineAccount,帶了會 400 VMWARE_DEPOT_AUTH_HTTP_OFFLINE_DEPOT_IS_UNSUPPORTED
 info "installer depot URL → http://127.0.0.1:${PORT}"

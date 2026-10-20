@@ -1,4 +1,4 @@
-# VCF Installer 自己當 depot（metadata zip 流程）
+# VCF Installer 自己當 depot（metadata zip / download tool 本機下載）
 
 現場**只有 VCF Installer、沒有 depot server** 時，把 metadata zip 放到 installer 本機，
 讓 installer 從 `http://127.0.0.1:8080` 同步自己、下載自己。
@@ -14,6 +14,37 @@
 | zip 解進 `/nfs/vmware/vcf/nfs-mount/{metadata,compatibility,vsan-hcl}/` + 重啟 lcm | ❌ 檔案換了，但 API 上的 bundle 清單**完全沒變** —— installer 認的是 postgres DB，只有 sync 會寫 DB |
 | installer depot URL 指 `http://127.0.0.1:8080` + 帳密 | ❌ 400 `VMWARE_DEPOT_AUTH_HTTP_OFFLINE_DEPOT_IS_UNSUPPORTED` |
 | installer depot URL 指 `http://127.0.0.1:8080`、**不帶帳密** | ✅ 連線成功 → SYNCED → 下載成功，免憑證、免匯 CA |
+
+---
+
+## 兩種情境
+
+| | 情境 A：只有 metadata zip | 情境 B：download tool 就裝在 installer 上 |
+|---|---|---|
+| depot 內容來源 | 外面產好的 zip 帶進來 | download tool 直接下載到 installer 本機 |
+| 需要 zip 嗎 | 要 | **不用**（`binaries download` 會一起下 metadata，含 Compatibility） |
+| script 用法 | `--zip <zip>` | `--dir <download tool 的 -d 目錄>` |
+
+### 情境 B 指令（例：PROD 在 `/nfs/vmware/vcf/nfs-mount/vcf911/`）
+
+```bash
+# root(su -):下載。-d 指到 PROD 的上一層,工具會自己建 PROD/
+DT=/opt/vmware/vcf/lcm/vcf-download/bin/vcf-download-tool
+D=/nfs/vmware/vcf/nfs-mount/vcf911
+$DT binaries download -d=$D --depot-download-token-file=/root/token.txt     --vcf-version=9.1.1.0 --sku=VCF --automated-install --type=INSTALL --ceip=DISABLE
+chmod -R a+rX $D          # 下載出來是 root 的,讓 vcf 讀得到
+```
+
+```bash
+# vcf:讓 installer 以自己為 depot
+bash installer-local-depot.sh --dir /nfs/vmware/vcf/nfs-mount/vcf911
+```
+
+- 目錄是 root 的沒關係，script 只要求**讀得到**；有讀不到的檔會列出來並停下，照提示用 root `chmod -R a+rX` 一次即可。
+- 之後用 download tool 補下載（同一個 `-d`，累加不覆蓋），installer 那邊重新 sync 就看得到：
+  `bash installer-local-depot.sh --dir /nfs/vmware/vcf/nfs-mount/vcf911`
+- **不要**再對這個目錄 `--zip`：download tool 下的 metadata 比 zip 新，script 會拒絕蓋（硬要蓋加 `--force`）。
+- 空間：`df -h /nfs/vmware/vcf/nfs-mount`，9.1.1 INSTALL 全套約 62G。
 
 ---
 
