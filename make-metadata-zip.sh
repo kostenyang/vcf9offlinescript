@@ -27,7 +27,7 @@ import sys, os, tarfile, zipfile, fnmatch
 
 src, out = sys.argv[1], sys.argv[2]
 
-# 官方 metadata zip 的 13 檔結構（VCENTER 的 vmw/<uuid>/ 以萬用字元對應）
+# 官方 metadata zip 的 13 檔結構 + vCenter patch repo manifest（vmw/<uuid>/ 以萬用字元對應）
 PATTERNS = [
  'PROD/metadata/Compatibility/v1/VmwareCompatibilityData.json',
  'PROD/metadata/Compatibility/v2/VmwareCompatibilityData.json',
@@ -42,6 +42,12 @@ PATTERNS = [
  'PROD/COMP/VCENTER/vmw/*/upgrade_info.sig',
  'PROD/COMP/VCENTER/vmw/*/upgrade_info.xml',
  'PROD/COMP/VCENTER/vmw/*/upgrade_info.xml.sha256',
+ # vCenter patch repo 的 manifest（只有 UPGRADE/Update-Only 的 depot 才有；
+ # 沒有就只會印 WARN missing，不影響 installer sync）
+ 'PROD/COMP/VCENTER/vmw/*/*/manifest/manifest-latest.xml',
+ 'PROD/COMP/VCENTER/vmw/*/*/manifest/manifest-latest.xml.sha256',
+ 'PROD/COMP/VCENTER/vmw/*/*/manifest/manifest-repo.xml',
+ 'PROD/COMP/VCENTER/vmw/*/*/manifest/manifest-repo.xml.sha256',
 ]
 # installer sync 一定要有的（缺了 sync 會失敗 -> exit 1）
 CRITICAL = [
