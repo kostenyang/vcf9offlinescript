@@ -291,6 +291,7 @@ Also update the Depot URL in **VCF Installer → Administration → Depot Settin
 
 **三條上 depot server 的路**
 - [DEPOT-WAY-A-download-tool.md](DEPOT-WAY-A-download-tool.md) — 路 A：download-tool 下載（Windows）→ 打包 tar → 傳
+- [INSTALLER-LOCAL-DEPOT.md](INSTALLER-LOCAL-DEPOT.md) — 沒有 depot server:metadata zip 丟 installer 本機,`installer-local-depot.sh` 讓 installer 自己當 depot
 - [DEPOT-WAY-B-flat-metadata.md](DEPOT-WAY-B-flat-metadata.md) — 路 B：手動 flat + metadata zip → `sort-flat-depot.sh` → 傳
 - [DEPOT-WAY-C-0400.md](DEPOT-WAY-C-0400.md) — 路 C：路 B 釘死 9.1.0.0400
 
