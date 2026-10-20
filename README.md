@@ -74,6 +74,8 @@ sudo bash import_vcf9depot_ca.sh \
 | **`change_depot_hostname_ip.sh`** | **Change hostname and/or IP after initial setup — regenerates cert automatically** |
 | `fix_sshd_config.sh` | Fix duplicate sshd_config entries from sftpv1.sh |
 | `sftpv1.sh` / `test_sftp.sh` | SFTP setup and connectivity test |
+| **`installer-local-depot.sh`** | **No depot server? Turn the VCF Installer itself into the depot** — extract metadata zip / depot tar on the installer, serve on `http://127.0.0.1:8080` (unauthenticated HTTP, no CA import), point the installer at itself, sync, download. Runs as `vcf`, no root. `--stop --restore-url` reverts. Verified on Installer 9.1.1 (sync SYNCED + bundle download SUCCESSFUL) |
+| `make-metadata-zip.sh` | Build a metadata zip (13 official files + vCenter patch-repo manifest) from a depot dir or tar.gz |
 | `ubuntu_offline_packages.sh` | Build / install an offline `.deb` bundle for air-gapped Ubuntu. **Prebuilt bundles for 20.04 / 22.04 / 24.04 are attached to [Releases](https://github.com/kostenyang/vcf9offlinescript/releases/tag/ubuntu-vcfdepot-offline)** — see [OFFLINE-OS-REPO.md](OFFLINE-OS-REPO.md) |
 
 ---
