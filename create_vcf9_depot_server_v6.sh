@@ -664,10 +664,6 @@ server {
 server {
     listen ${DEPOT_HTTP_PORT};
     server_name ${DEPOT_FQDN};
-    # 🔴 這個 heredoc 是 <<EOF(會展開),所以 nginx 自己的變數一定要跳脫成 \$xxx,
-    #    否則 set -u 會以 "unbound variable" 中止。\$request_uri 是 nginx 的變數。
-    #    v6 順便把 \$host 換成固定 FQDN:少一個要跳脫的變數,也避免用 IP 直連時
-    #    被導到錯誤的 Host。
     return 301 https://${DEPOT_FQDN}:${DEPOT_PORT}\$request_uri;
 }
 EOF
@@ -939,7 +935,8 @@ fi
   --vcf-version   "\${VCF_VERSION}" \\
   --automated-install \\
   --depot-store   "\${DEPOT_STORE}" \\
-  --type          "\${DOWNLOAD_TYPE}"
+  --type          "\${DOWNLOAD_TYPE}" \\
+  --ceip=DISABLE
 HELPER
   chmod +x "${helper}"
 }
